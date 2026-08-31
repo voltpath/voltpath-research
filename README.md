@@ -9,14 +9,17 @@ Each article lives in `articles/<slug>/`:
 - `<slug>.ipynb` – the article. Markdown cells carry the narrative, code cells run the analysis.
 - `media/` – reference screenshots of the notebook's expected output, since cell outputs aren't committed (see below).
 
-Open the notebook and run it top to bottom. You'll need your own Voltpath API key (free – sign up at [voltpath.ai](https://voltpath.ai)) pasted into the first code cell; this calls the live Voltpath API, so the data you see is current, not a frozen snapshot.
+Open the notebook and run it top to bottom. You'll need your own Voltpath API key (free – sign up at [voltpath.ai](https://voltpath.ai)); this calls the live Voltpath API, so the data you see is current, not a frozen snapshot.
 
 ## Running locally
 
 ```bash
+cp .env.example .env   # paste your API key into VOLTPATH_API_KEY
 uv sync
 uv run jupyter lab
 ```
+
+Leave `.env` empty and the notebook prompts for the key instead.
 
 ## Data source and licensing
 
