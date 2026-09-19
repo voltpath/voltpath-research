@@ -3,3 +3,11 @@ __pycache__/
 .ipynb_checkpoints/
 .env
 .env.local
+
+notes/
+scratch/
+
+.agents/
+.claude/
+skills-lock.json
+articles/.cache/

@@ -8,6 +8,7 @@ dependencies = [
     "plotly>=5",
     "requests>=2",
     "python-dotenv>=1",
+    "pyarrow>=25.0.1",
 ]
 
 [dependency-groups]
