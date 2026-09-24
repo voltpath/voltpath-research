@@ -1,0 +1,19 @@
+[project]
+name = "voltpath-research"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "jupyterlab>=4",
+    "pandas>=2",
+    "plotly>=5",
+    "requests>=2",
+    "python-dotenv>=1",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=3",
+    "nbstripout>=0.7",
+    "kaleido>=0.2",
+    "nbconvert>=7",
+]
