@@ -27,27 +27,41 @@ CACHE_DIR = Path(__file__).parent.parent / ".cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
 
-def _cache_path(date_from: str, date_to: str, resolution: str | None) -> Path:
-    key = hashlib.sha1(f"{date_from}|{date_to}|{resolution}".encode()).hexdigest()
+def _cache_path(
+    date_from: str, date_to: str, resolution: str | None, zone: list[str] | None
+) -> Path:
+    key = hashlib.sha1(
+        f"{date_from}|{date_to}|{resolution}|{','.join(zone or [])}".encode()
+    ).hexdigest()
     return CACHE_DIR / f"{key}.parquet"
 
 
 def fetch_flows(
-    date_from: str, date_to: str, resolution: str | None = None, refresh: bool = False
+    date_from: str,
+    date_to: str,
+    resolution: str | None = None,
+    zone: list[str] | None = None,
+    refresh: bool = False,
 ) -> pd.DataFrame:
     """Fetch one date range from /api/v1/flows, cached to disk by request params.
 
     Re-running a notebook top to bottom is the normal workflow, so by default
     this reuses whatever's already on disk instead of re-hitting the API.
     Pass refresh=True to bypass the cache for one call (e.g. checking for new data).
+
+    `zone` filters server-side to borders touching any of the given bidding
+    zones (e.g. `["EE", "LV", "LT"]`) - cheaper than fetching all of Europe
+    and filtering client-side for a wide date range.
     """
-    cache_file = _cache_path(date_from, date_to, resolution)
+    cache_file = _cache_path(date_from, date_to, resolution, zone)
     if cache_file.exists() and not refresh:
         return pd.read_parquet(cache_file)
 
-    params = {"datetime_from": date_from, "datetime_to": date_to}
+    params: dict[str, str | list[str]] = {"datetime_from": date_from, "datetime_to": date_to}
     if resolution:
         params["resolution"] = resolution
+    if zone:
+        params["zone"] = zone
 
     # Server is a token bucket, capacity 200, refill 2 req/sec per API key
     # (apps/api/src/api/main.py:97-98). A 429 response carries an exact

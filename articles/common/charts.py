@@ -9,7 +9,13 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from .metrics import hourly_border_counts
-from .regions import REGION_COLORS, border_country, border_region
+from .regions import (
+    CCR_MECHANISM_COLORS,
+    REGION_COLORS,
+    border_ccr_mechanism,
+    border_country,
+    border_region,
+)
 
 FLOW_COLORS = {
     "Convergence": "#08415C",
@@ -20,6 +26,31 @@ FLOW_COLORS = {
 
 # Distinct from all flow-type colors above, used for the avg-price overlay line.
 PRICE_LINE = {"color": "#000000", "dash": "dot"}
+
+# Matches the voltpath web app's chart style (apps/web/src/hooks/colors.ts, Recharts +
+# D3 Tableau10 for categorical series) so static article charts read as the same product.
+CHART_FONT = "Geist Sans, -apple-system, sans-serif"
+CATEGORICAL_PALETTE = px.colors.qualitative.T10
+QUADRANT_COLORS = {"intuitive": "#16A765", "counter_intuitive": "#CC3A21"}
+
+
+def _apply_web_style(fig: go.Figure) -> go.Figure:
+    """Shared axis/legend/font styling to match the web app's Recharts charts.
+
+    Three rounds of a custom top-horizontal legend (positioned via paper
+    y-fractions) all ended up overlapping the title, the subplot titles, or
+    the plot itself at some figure size - title/legend/subplot-titles share
+    the same whole-canvas coordinate space, so "sits above the plot" isn't a
+    fixed offset, it depends on figure height and on per-chart quirks (e.g.
+    a pulled pie slice extending past its own domain). Plotly's default
+    legend - vertical, docked outside the right edge of the plot - has none
+    of these failure modes, so that's what this uses; it's a deliberate
+    departure from the web app's top-aligned legend, not an oversight.
+    """
+    fig.update_layout(font={"family": CHART_FONT}, plot_bgcolor="white")
+    fig.update_xaxes(showline=False, ticks="", zeroline=False)
+    fig.update_yaxes(showline=False, ticks="", zeroline=False, showticklabels=True)
+    return fig
 
 
 def save_chart(fig: go.Figure, name: str, **kwargs) -> None:
@@ -250,6 +281,293 @@ def border_count_price_chart(
     return fig
 
 
+def congestion_ci_chart(df: pd.DataFrame, event: dict) -> go.Figure:
+    """Congested vs. counter-intuitive border counts around one structural-change event.
+
+    `event` needs `name`, `date`, `date_from`, `date_to` (a dashed vline
+    marks `date`); every structural-change notebook runs this first, so it
+    lives here rather than copy-pasted per notebook.
+    """
+    frames = []
+    for flow_type in ("Congestion", "Counter-intuitive"):
+        counts = hourly_border_counts(df, flow_type)
+        counts["flow_type"] = flow_type
+        frames.append(counts)
+    combined = pd.concat(frames)
+
+    fig = px.line(
+        combined,
+        x="datetime",
+        y="n_borders",
+        color="flow_type",
+        title=f"{event['name']}: congested / counter-intuitive borders, {event['date_from']} to {event['date_to']}",
+        labels={"n_borders": "Borders", "datetime": "Time", "flow_type": "Flow type"},
+        color_discrete_map=FLOW_COLORS,
+    )
+    fig.add_vline(x=event["date"], line_dash="dash", annotation_text=event["name"])
+    return fig
+
+
+def _border_color_map(borders: list[str]) -> dict[str, str]:
+    palette = CATEGORICAL_PALETTE
+    return {b: palette[i % len(palette)] for i, b in enumerate(sorted(borders))}
+
+
+def flow_duration_curve(df: pd.DataFrame, title: str) -> go.Figure:
+    """Per-border duration curve (flow sorted descending vs. % of time at/above it).
+
+    A flat top (curve clipped at a fixed level before it starts sloping down)
+    is the border running at its transfer-capacity ceiling a large share of
+    the time - the shape to compare before/after a structural change to see
+    whether the physical ceiling itself moved. Pass an optional `period`
+    column (e.g. "before"/"after") to split into side-by-side subplots on a
+    shared y-axis instead of one figure.
+    """
+    periods: list[str] = (
+        df["period"].unique().tolist() if "period" in df.columns else []
+    )
+    colors = _border_color_map(df["border"].unique().tolist())
+    fig = make_subplots(
+        rows=1,
+        cols=len(periods) or 1,
+        subplot_titles=[p.title() for p in periods],
+        shared_yaxes=True,
+    )
+    for col, period in enumerate(periods or [None], start=1):
+        subset = df[df["period"] == period] if period else df
+        for border, group in subset.groupby("border"):
+            sorted_flow = group["net_flow_mw"].sort_values(ascending=False).reset_index(
+                drop=True
+            )
+            n = len(sorted_flow)
+            pct = (sorted_flow.index / (n - 1) * 100) if n > 1 else [0]
+            fig.add_scatter(
+                x=pct,
+                y=sorted_flow,
+                mode="lines",
+                name=border,
+                legendgroup=border,
+                showlegend=(col == 1),
+                line={"color": colors[border]},
+                row=1,
+                col=col,
+            )
+    fig.add_hline(y=0, line_dash="dash", line_width=1.5, line_color="#9CA3AF")
+    fig.update_layout(title=title, width=1120, height=480)
+    fig.update_xaxes(title="% of time at or above", showgrid=False)
+    fig.update_yaxes(title="Net flow (MW)", col=1, title_standoff=0)
+    fig.update_yaxes(showgrid=True, gridcolor="#E5E7EB")
+    return _apply_web_style(fig)
+
+
+def flow_price_scatter(df: pd.DataFrame, title: str) -> go.Figure:
+    """Per-border (net flow, price delta) scatter.
+
+    Flow that tracks the price signal traces a rising curve that saturates
+    at the border's capacity; points off that curve are flow moving against
+    (or indifferent to) the price gap - loop flow / scheduling artifacts
+    rather than commercial arbitrage. Pass an optional `period` column to
+    split into side-by-side subplots for a before/after comparison.
+    """
+    periods: list[str] = (
+        df["period"].unique().tolist() if "period" in df.columns else []
+    )
+    colors = _border_color_map(df["border"].unique().tolist())
+    fig = make_subplots(
+        rows=1,
+        cols=len(periods) or 1,
+        subplot_titles=[p.title() for p in periods],
+        shared_yaxes=True,
+        shared_xaxes=True,
+    )
+    # Shared across both before/after panels (not per-subset) and padded past the data
+    # max, so the quadrant shading fills the full autoranged axes in both panels rather
+    # than stopping short wherever one panel's data happens to be smaller.
+    x_max = (df["net_flow_mw"].abs().max() or 1) * 1.1
+    y_max = (df["price_delta"].abs().max() or 1) * 1.1
+    for col, period in enumerate(periods or [None], start=1):
+        subset = df[df["period"] == period] if period else df
+        # Intuitive: flow and price delta share sign (flow follows the price signal).
+        # Counter-intuitive: opposite signs (loop flow / scheduling artifacts).
+        fig.add_shape(
+            type="rect", x0=0, x1=x_max, y0=0, y1=y_max,
+            fillcolor=QUADRANT_COLORS["intuitive"], opacity=0.06, line_width=0,
+            layer="below", row=1, col=col,
+        )
+        fig.add_shape(
+            type="rect", x0=-x_max, x1=0, y0=-y_max, y1=0,
+            fillcolor=QUADRANT_COLORS["intuitive"], opacity=0.06, line_width=0,
+            layer="below", row=1, col=col,
+        )
+        fig.add_shape(
+            type="rect", x0=0, x1=x_max, y0=-y_max, y1=0,
+            fillcolor=QUADRANT_COLORS["counter_intuitive"], opacity=0.06, line_width=0,
+            layer="below", row=1, col=col,
+        )
+        fig.add_shape(
+            type="rect", x0=-x_max, x1=0, y0=0, y1=y_max,
+            fillcolor=QUADRANT_COLORS["counter_intuitive"], opacity=0.06, line_width=0,
+            layer="below", row=1, col=col,
+        )
+        for border, group in subset.groupby("border"):
+            fig.add_scatter(
+                x=group["net_flow_mw"],
+                y=group["price_delta"],
+                mode="markers",
+                name=border,
+                legendgroup=border,
+                showlegend=(col == 1),
+                # Thin dark outline keeps dots legible against the light
+                # quadrant tint (and each other) instead of washing out at
+                # marker opacity 0.5 - the quadrant fill has no such outline.
+                marker={
+                    "color": colors[border],
+                    "opacity": 0.7,
+                    "size": 5,
+                    "line": {"width": 0.5, "color": "#1F2937"},
+                },
+                row=1,
+                col=col,
+            )
+        fig.add_hline(y=0, line_width=1.5, line_color="#9CA3AF", row=1, col=col)
+        fig.add_vline(x=0, line_width=1.5, line_color="#9CA3AF", row=1, col=col)
+        for label, kind, xy in [
+            ("Intuitive", "intuitive", (x_max * 0.97, y_max * 0.95)),
+            ("Intuitive", "intuitive", (-x_max * 0.97, -y_max * 0.95)),
+            ("Counter-intuitive", "counter_intuitive", (-x_max * 0.97, y_max * 0.95)),
+            ("Counter-intuitive", "counter_intuitive", (x_max * 0.97, -y_max * 0.95)),
+        ]:
+            fig.add_annotation(
+                x=xy[0], y=xy[1], text=label, showarrow=False,
+                font={"size": 11, "color": QUADRANT_COLORS[kind]},
+                xanchor="right" if xy[0] > 0 else "left",
+                row=1, col=col,
+            )
+    fig.update_layout(title=title, width=1120, height=480)
+    fig.update_xaxes(title="Net flow (MW)", showgrid=True, gridcolor="#E5E7EB")
+    fig.update_yaxes(title="Price delta (EUR/MWh)", col=1)
+    fig.update_yaxes(showgrid=True, gridcolor="#E5E7EB")
+    return _apply_web_style(fig)
+
+
+FLOW_TYPE_ORDER = ["Convergence", "Congestion", "Counter-intuitive", "Outage"]
+
+
+def flow_type_share_pies(df: pd.DataFrame, event_date: str, title: str) -> go.Figure:
+    """Before/after pair of pies, each showing flow_type's share of total duration_h.
+
+    Makes `before_after_convergence`'s printed numbers visual: pulls the
+    Convergence slice out on both pies so the same before/after comparison
+    that check reports as text is visible at a glance here too.
+    """
+    labelled = df.copy()
+    labelled["period"] = labelled["datetime"].lt(event_date).map({True: "Before", False: "After"})
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        specs=[[{"type": "domain"}, {"type": "domain"}]],
+        subplot_titles=["Before", "After"],
+    )
+    for col, period in enumerate(["Before", "After"], start=1):
+        totals = (
+            labelled[labelled["period"] == period]
+            .groupby("flow_type")["duration_h"]
+            .sum()
+            .reindex(FLOW_TYPE_ORDER)
+            .fillna(0)
+        )
+        fig.add_pie(
+            labels=totals.index,
+            values=totals.values,
+            sort=False,
+            marker={"colors": [FLOW_COLORS[t] for t in FLOW_TYPE_ORDER]},
+            pull=[0.08 if t == "Convergence" else 0 for t in FLOW_TYPE_ORDER],
+            showlegend=(col == 1),
+            row=1,
+            col=col,
+        )
+    fig.update_layout(title=title, width=1000, height=550)
+    return _apply_web_style(fig)
+
+
+def litgrid_capacity_plan_chart(observed_2026: tuple[float, float] | None = None) -> go.Figure:
+    """LT-PL allocated capacity: pre-sync, post-sync, and Litgrid's own recovery plan.
+
+    Figures are Litgrid's press-statement numbers (see markdown above for
+    sources), not our own fetched flow data - solid bars are what Litgrid
+    reported as already observed, hatched bars are its forward-looking plan.
+
+    Pass `observed_2026` as `(avg_export_mw, avg_import_mw)` from our own
+    fetched LT-PL flow data to add a bar checking Litgrid's "end of 2026:
+    365/200 MW" target against how the year's actually gone so far.
+    """
+    rows = [
+        {"stage": "Pre-sync (historical)", "kind": "Observed", "direction": "Export", "capacity_mw": 350},
+        {"stage": "Pre-sync (historical)", "kind": "Observed", "direction": "Import", "capacity_mw": 492},
+        {"stage": "Post-sync avg (since Feb 2025)", "kind": "Observed", "direction": "Export", "capacity_mw": 170},
+        {"stage": "Post-sync avg (since Feb 2025)", "kind": "Observed", "direction": "Import", "capacity_mw": 150},
+        {"stage": "Plan: end of 2026", "kind": "Litgrid's planned trajectory", "direction": "Export", "capacity_mw": 365},
+        {"stage": "Plan: end of 2026", "kind": "Litgrid's planned trajectory", "direction": "Import", "capacity_mw": 200},
+        {"stage": "Plan: from 2027", "kind": "Litgrid's planned trajectory", "direction": "Export", "capacity_mw": 500},
+        {"stage": "Plan: from 2027", "kind": "Litgrid's planned trajectory", "direction": "Import", "capacity_mw": 353},
+    ]
+    stage_order = ["Pre-sync (historical)", "Post-sync avg (since Feb 2025)"]
+    if observed_2026 is not None:
+        avg_export, avg_import = observed_2026
+        rows += [
+            {"stage": "2026 so far (our data)", "kind": "Observed", "direction": "Export", "capacity_mw": avg_export},
+            {"stage": "2026 so far (our data)", "kind": "Observed", "direction": "Import", "capacity_mw": avg_import},
+        ]
+        stage_order.append("2026 so far (our data)")
+    stage_order += ["Plan: end of 2026", "Plan: from 2027"]
+    capacity = pd.DataFrame(rows)
+    capacity["stage"] = pd.Categorical(capacity["stage"], categories=stage_order, ordered=True)
+    fig = px.bar(
+        capacity.sort_values("stage"),
+        x="stage",
+        y="capacity_mw",
+        color="direction",
+        pattern_shape="kind",
+        pattern_shape_map={"Observed": "", "Litgrid's planned trajectory": "/"},
+        barmode="group",
+        title="LT–PL allocated capacity: before sync, since sync, and Litgrid's recovery plan",
+        labels={"capacity_mw": "Allocated capacity (MW)", "stage": "", "direction": "Direction", "kind": "Basis"},
+    )
+    return fig
+
+
+def ast_price_convergence_chart() -> go.Figure:
+    """Share of trading intervals with identical day-ahead prices, 2024 vs 2025, per border pair.
+
+    Numbers are AST's own year-in-review figures (Latvian electricity market
+    overview), not our own fetched data. AST attributes LV-EE's 21pp drop to
+    Estonian line maintenance, not Baltic sync - LV-LT barely moving in the
+    same period is the contrast that shows this isn't a Baltic-wide effect.
+    """
+    convergence = pd.DataFrame(
+        [
+            {"pair": "FI & EE", "year": "2024", "share_pct": 32.1},
+            {"pair": "FI & EE", "year": "2025", "share_pct": 19.6},
+            {"pair": "EE & LV", "year": "2024", "share_pct": 97.2},
+            {"pair": "EE & LV", "year": "2025", "share_pct": 75.9},
+            {"pair": "LV & LT", "year": "2024", "share_pct": 99.1},
+            {"pair": "LV & LT", "year": "2025", "share_pct": 98.7},
+            {"pair": "LT & SE4", "year": "2024", "share_pct": 22.0},
+            {"pair": "LT & SE4", "year": "2025", "share_pct": 3.3},
+        ]
+    )
+    fig = px.bar(
+        convergence,
+        x="pair",
+        y="share_pct",
+        color="year",
+        barmode="group",
+        title="Share of trading intervals with identical day-ahead price, by border pair",
+        labels={"share_pct": "% of intervals at identical price", "pair": "Border pair", "year": "Year"},
+    )
+    return fig
+
+
 def daily_rent_chart(congested: pd.DataFrame) -> go.Figure:
     """Daily total congestion rent, resampled from a `rent_eur`-bearing flow frame."""
     daily = (
@@ -355,4 +673,25 @@ def region_treemap(leaderboard: pd.DataFrame, year: str) -> go.Figure:
         width=1400,
         height=800,
     )
+    return fig
+
+
+def ccr_mechanism_treemap(leaderboard: pd.DataFrame, year: str) -> go.Figure:
+    """Congestion rent grouped by real CCR capacity-allocation mechanism (see BORDER_CCR).
+
+    Every row gets a mechanism label (falling back to CCR_OTHER), so unlike
+    `region_treemap` this is a plain two-level px.treemap - no variable-depth
+    hierarchy to build by hand.
+    """
+    data = leaderboard.copy()
+    data["mechanism"] = data["border"].map(border_ccr_mechanism)
+    fig = px.treemap(
+        data,
+        path=["mechanism", "border"],
+        values="implied_value_eur",
+        color="mechanism",
+        color_discrete_map=CCR_MECHANISM_COLORS,
+        title=f"Congestion rent by CCR capacity-allocation mechanism, {year} (EUR)",
+    )
+    fig.update_layout(width=1400, height=800)
     return fig

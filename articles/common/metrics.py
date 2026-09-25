@@ -10,6 +10,20 @@ def hourly_border_counts(df: pd.DataFrame, flow_type: str) -> pd.DataFrame:
     )
 
 
+def before_after_convergence(df: pd.DataFrame, event_date: str) -> pd.Series:
+    """Mean `share_converged` before vs. after `event_date` - the mechanical
+    before/after check every structural-change notebook runs first.
+    """
+    before = df[df["datetime"] < event_date]
+    after = df[df["datetime"] >= event_date]
+    return pd.Series(
+        {
+            "share_converged_before": convergence_summary(before)["share_converged"].mean(),
+            "share_converged_after": convergence_summary(after)["share_converged"].mean(),
+        }
+    )
+
+
 def peak(counts: pd.DataFrame) -> pd.Series:
     return counts.loc[counts["n_borders"].idxmax()]
 
