@@ -124,6 +124,14 @@ def border_region(border: str) -> str:
     return region_from if region_from == region_to else "Cross-region"
 
 
+BALTIC_ZONES = {"EE", "LV", "LT"}
+
+
+def is_baltic_border(border: str) -> bool:
+    """Whether either side of the border is a Baltic zone (see BALTIC_ZONES)."""
+    return any(zone in BALTIC_ZONES for zone in border.split(" -> "))
+
+
 _ZONE_COUNTRY_COUNTS = Counter(ZONE_COUNTRIES.values())
 # Countries split across several bidding zones (Norway NO_1..5, Italy IT_*,
 # etc.) - only these are worth a country-level treemap node between region
@@ -142,14 +150,9 @@ def border_country(border: str) -> str | None:
     zone_from, zone_to = border.split(" -> ")
     country_from = ZONE_COUNTRIES.get(zone_from, zone_from)
     country_to = ZONE_COUNTRIES.get(zone_to, zone_to)
-    if (
-        country_from not in MULTI_ZONE_COUNTRIES
-        and country_to not in MULTI_ZONE_COUNTRIES
-    ):
+    if country_from not in MULTI_ZONE_COUNTRIES and country_to not in MULTI_ZONE_COUNTRIES:
         return None
-    return (
-        country_from if country_from == country_to else f"{country_from} - {country_to}"
-    )
+    return country_from if country_from == country_to else f"{country_from} - {country_to}"
 
 
 CCR_OTHER = "Other (not in Iacopo's CCR breakdown)"
@@ -260,11 +263,7 @@ _CCR_BORDERS: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
-BORDER_CCR = {
-    frozenset(pair): mechanism
-    for mechanism, pairs in _CCR_BORDERS.items()
-    for pair in pairs
-}
+BORDER_CCR = {frozenset(pair): mechanism for mechanism, pairs in _CCR_BORDERS.items() for pair in pairs}
 
 
 def border_ccr_mechanism(border: str) -> str:

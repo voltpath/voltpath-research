@@ -16,9 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_URL = "https://api.voltpath.ai"
-API_KEY = os.environ.get("VOLTPATH_API_KEY") or getpass.getpass(
-    "Voltpath API key (from voltpath.ai): "
-)
+API_KEY = os.environ.get("VOLTPATH_API_KEY") or getpass.getpass("Voltpath API key (from voltpath.ai): ")
 HEADERS = {"x-api-key": API_KEY} if API_KEY else {}
 
 # One level up from this package (articles/.cache), shared across all articles
@@ -27,12 +25,8 @@ CACHE_DIR = Path(__file__).parent.parent / ".cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
 
-def _cache_path(
-    date_from: str, date_to: str, resolution: str | None, zone: list[str] | None
-) -> Path:
-    key = hashlib.sha1(
-        f"{date_from}|{date_to}|{resolution}|{','.join(zone or [])}".encode()
-    ).hexdigest()
+def _cache_path(date_from: str, date_to: str, resolution: str | None, zone: list[str] | None) -> Path:
+    key = hashlib.sha1(f"{date_from}|{date_to}|{resolution}|{','.join(zone or [])}".encode()).hexdigest()
     return CACHE_DIR / f"{key}.parquet"
 
 
@@ -66,18 +60,14 @@ def fetch_flows(
     # Server is a token bucket, capacity 200, refill 2 req/sec per API key
     # (apps/api/src/api/main.py:97-98). A 429 response carries an exact
     # Retry-After (seconds) - honor that instead of guessing a backoff.
-    resp = requests.get(
-        f"{BASE_URL}/api/v1/flows", headers=HEADERS, params=params, timeout=60
-    )
+    resp = requests.get(f"{BASE_URL}/api/v1/flows", headers=HEADERS, params=params, timeout=60)
     for _ in range(10):
         if resp.status_code != 429:
             break
         # + jitter: concurrent workers all sleeping the same Retry-After
         # wake up together and re-collide on the 2/sec bucket otherwise.
         time.sleep(float(resp.headers.get("Retry-After", 1)) + random.uniform(0, 0.5))
-        resp = requests.get(
-            f"{BASE_URL}/api/v1/flows", headers=HEADERS, params=params, timeout=60
-        )
+        resp = requests.get(f"{BASE_URL}/api/v1/flows", headers=HEADERS, params=params, timeout=60)
     resp.raise_for_status()
 
     df = pd.DataFrame(resp.json()["data"])
@@ -87,13 +77,7 @@ def fetch_flows(
     df["datetime"] = pd.to_datetime(df["datetime"])
     df["border"] = df["bidding_zone_from"] + " -> " + df["bidding_zone_to"]
 
-    diffs_h = (
-        df.sort_values("datetime")
-        .groupby("border")["datetime"]
-        .diff()
-        .dt.total_seconds()
-        / 3600
-    )
+    diffs_h = df.sort_values("datetime").groupby("border")["datetime"].diff().dt.total_seconds() / 3600
     median_cadence = diffs_h.groupby(df["border"]).transform("median")
     df["duration_h"] = diffs_h.fillna(median_cadence)
 
@@ -132,11 +116,8 @@ def fetch_flows_range(
     """
     days = pd.date_range(date_from, date_to, freq=f"{chunk_days}D")
     ranges = [
-        (start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
-        for start, end in itertools.pairwise(days)
+        (start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")) for start, end in itertools.pairwise(days)
     ]
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        frames = list(
-            pool.map(lambda r: fetch_flows(r[0], r[1], resolution="native"), ranges)
-        )
+        frames = list(pool.map(lambda r: fetch_flows(r[0], r[1], resolution="native"), ranges))
     return pd.concat(frames, ignore_index=True)

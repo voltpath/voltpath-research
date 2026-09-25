@@ -5,9 +5,7 @@ import pandas as pd
 
 def hourly_border_counts(df: pd.DataFrame, flow_type: str) -> pd.DataFrame:
     subset = df[df["flow_type"] == flow_type]
-    return (
-        subset.groupby("datetime")["border"].nunique().rename("n_borders").reset_index()
-    )
+    return subset.groupby("datetime")["border"].nunique().rename("n_borders").reset_index()
 
 
 def before_after_convergence(df: pd.DataFrame, event_date: str) -> pd.Series:
@@ -75,9 +73,7 @@ def flow_type_summary(df: pd.DataFrame, flow_type: str) -> pd.DataFrame:
 def convergence_summary(df: pd.DataFrame) -> pd.DataFrame:
     total_hours = df.groupby("border")["duration_h"].sum()
     conv = df[df["flow_type"] == "Convergence"]
-    out = conv.groupby("border").agg(
-        volume_mwh=("volume_mwh", "sum"), converged_hours=("duration_h", "sum")
-    )
+    out = conv.groupby("border").agg(volume_mwh=("volume_mwh", "sum"), converged_hours=("duration_h", "sum"))
     out["share_converged"] = out["converged_hours"] / total_hours.reindex(out.index)
     return out.sort_values("volume_mwh", ascending=False).reset_index()
 

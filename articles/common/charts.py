@@ -157,9 +157,7 @@ def congestion_rent_schematic() -> go.Figure:
 
     sink_price = demand_intercept - demand_slope * actual_flow
     source_price = supply_intercept + supply_slope * actual_flow
-    unconstrained_flow = (demand_intercept - supply_intercept) / (
-        demand_slope + supply_slope
-    )
+    unconstrained_flow = (demand_intercept - supply_intercept) / (demand_slope + supply_slope)
     unconstrained_price = demand_intercept - demand_slope * unconstrained_flow
     centroid_x = (actual_flow * 2 + unconstrained_flow) / 3
     centroid_y = (sink_price + source_price + unconstrained_price) / 3
@@ -213,9 +211,7 @@ def congestion_rent_schematic() -> go.Figure:
         (sink_price + 2, "Sink price (P<sub>d</sub>)"),
         (source_price - 2, "Source price (P<sub>s</sub>)"),
     ]:
-        fig.add_annotation(
-            x=5, y=y, text=text, showarrow=False, xanchor="left", bgcolor="white"
-        )
+        fig.add_annotation(x=5, y=y, text=text, showarrow=False, xanchor="left", bgcolor="white")
     fig.add_annotation(
         x=actual_flow / 2,
         y=(sink_price + source_price) / 2,
@@ -300,11 +296,44 @@ def congestion_ci_chart(df: pd.DataFrame, event: dict) -> go.Figure:
         x="datetime",
         y="n_borders",
         color="flow_type",
-        title=f"{event['name']}: congested / counter-intuitive borders, {event['date_from']} to {event['date_to']}",
+        title=(
+            f"{event['name']}: congested / counter-intuitive borders, "
+            f"{event['date_from']} to {event['date_to']}"
+        ),
         labels={"n_borders": "Borders", "datetime": "Time", "flow_type": "Flow type"},
         color_discrete_map=FLOW_COLORS,
     )
     fig.add_vline(x=event["date"], line_dash="dash", annotation_text=event["name"])
+    return fig
+
+
+def before_after_convergence_chart(comparison: pd.Series, event: dict) -> go.Figure:
+    """Bar chart for the `before_after_convergence` before/after comparison.
+
+    Every structural-change notebook runs `before_after_convergence` first;
+    this is the paired chart so the result lands as a chart, not a print.
+    """
+    plot_df = pd.DataFrame(
+        {
+            "period": ["Before", "After"],
+            "share_converged": [
+                comparison["share_converged_before"],
+                comparison["share_converged_after"],
+            ],
+        }
+    )
+    fig = px.bar(
+        plot_df,
+        x="period",
+        y="share_converged",
+        title=(
+            f"{event['name']}: share of hours with convergent flow, "
+            f"before vs. after {event['date_from']} to {event['date_to']}"
+        ),
+        labels={"share_converged": "Share converged", "period": "Period"},
+        color_discrete_sequence=[FLOW_COLORS["Convergence"]],
+    )
+    fig.update_yaxes(tickformat=".0%")
     return fig
 
 
@@ -323,9 +352,7 @@ def flow_duration_curve(df: pd.DataFrame, title: str) -> go.Figure:
     column (e.g. "before"/"after") to split into side-by-side subplots on a
     shared y-axis instead of one figure.
     """
-    periods: list[str] = (
-        df["period"].unique().tolist() if "period" in df.columns else []
-    )
+    periods: list[str] = df["period"].unique().tolist() if "period" in df.columns else []
     colors = _border_color_map(df["border"].unique().tolist())
     fig = make_subplots(
         rows=1,
@@ -336,9 +363,7 @@ def flow_duration_curve(df: pd.DataFrame, title: str) -> go.Figure:
     for col, period in enumerate(periods or [None], start=1):
         subset = df[df["period"] == period] if period else df
         for border, group in subset.groupby("border"):
-            sorted_flow = group["net_flow_mw"].sort_values(ascending=False).reset_index(
-                drop=True
-            )
+            sorted_flow = group["net_flow_mw"].sort_values(ascending=False).reset_index(drop=True)
             n = len(sorted_flow)
             pct = (sorted_flow.index / (n - 1) * 100) if n > 1 else [0]
             fig.add_scatter(
@@ -369,9 +394,7 @@ def flow_price_scatter(df: pd.DataFrame, title: str) -> go.Figure:
     rather than commercial arbitrage. Pass an optional `period` column to
     split into side-by-side subplots for a before/after comparison.
     """
-    periods: list[str] = (
-        df["period"].unique().tolist() if "period" in df.columns else []
-    )
+    periods: list[str] = df["period"].unique().tolist() if "period" in df.columns else []
     colors = _border_color_map(df["border"].unique().tolist())
     fig = make_subplots(
         rows=1,
@@ -390,24 +413,56 @@ def flow_price_scatter(df: pd.DataFrame, title: str) -> go.Figure:
         # Intuitive: flow and price delta share sign (flow follows the price signal).
         # Counter-intuitive: opposite signs (loop flow / scheduling artifacts).
         fig.add_shape(
-            type="rect", x0=0, x1=x_max, y0=0, y1=y_max,
-            fillcolor=QUADRANT_COLORS["intuitive"], opacity=0.06, line_width=0,
-            layer="below", row=1, col=col,
+            type="rect",
+            x0=0,
+            x1=x_max,
+            y0=0,
+            y1=y_max,
+            fillcolor=QUADRANT_COLORS["intuitive"],
+            opacity=0.06,
+            line_width=0,
+            layer="below",
+            row=1,
+            col=col,
         )
         fig.add_shape(
-            type="rect", x0=-x_max, x1=0, y0=-y_max, y1=0,
-            fillcolor=QUADRANT_COLORS["intuitive"], opacity=0.06, line_width=0,
-            layer="below", row=1, col=col,
+            type="rect",
+            x0=-x_max,
+            x1=0,
+            y0=-y_max,
+            y1=0,
+            fillcolor=QUADRANT_COLORS["intuitive"],
+            opacity=0.06,
+            line_width=0,
+            layer="below",
+            row=1,
+            col=col,
         )
         fig.add_shape(
-            type="rect", x0=0, x1=x_max, y0=-y_max, y1=0,
-            fillcolor=QUADRANT_COLORS["counter_intuitive"], opacity=0.06, line_width=0,
-            layer="below", row=1, col=col,
+            type="rect",
+            x0=0,
+            x1=x_max,
+            y0=-y_max,
+            y1=0,
+            fillcolor=QUADRANT_COLORS["counter_intuitive"],
+            opacity=0.06,
+            line_width=0,
+            layer="below",
+            row=1,
+            col=col,
         )
         fig.add_shape(
-            type="rect", x0=-x_max, x1=0, y0=0, y1=y_max,
-            fillcolor=QUADRANT_COLORS["counter_intuitive"], opacity=0.06, line_width=0,
-            layer="below", row=1, col=col,
+            type="rect",
+            x0=-x_max,
+            x1=0,
+            y0=0,
+            y1=y_max,
+            fillcolor=QUADRANT_COLORS["counter_intuitive"],
+            opacity=0.06,
+            line_width=0,
+            layer="below",
+            row=1,
+            col=col,
         )
         for border, group in subset.groupby("border"):
             fig.add_scatter(
@@ -438,10 +493,14 @@ def flow_price_scatter(df: pd.DataFrame, title: str) -> go.Figure:
             ("Counter-intuitive", "counter_intuitive", (x_max * 0.97, -y_max * 0.95)),
         ]:
             fig.add_annotation(
-                x=xy[0], y=xy[1], text=label, showarrow=False,
+                x=xy[0],
+                y=xy[1],
+                text=label,
+                showarrow=False,
                 font={"size": 11, "color": QUADRANT_COLORS[kind]},
                 xanchor="right" if xy[0] > 0 else "left",
-                row=1, col=col,
+                row=1,
+                col=col,
             )
     fig.update_layout(title=title, width=1120, height=480)
     fig.update_xaxes(title="Net flow (MW)", showgrid=True, gridcolor="#E5E7EB")
@@ -482,6 +541,9 @@ def flow_type_share_pies(df: pd.DataFrame, event_date: str, title: str) -> go.Fi
             sort=False,
             marker={"colors": [FLOW_COLORS[t] for t in FLOW_TYPE_ORDER]},
             pull=[0.08 if t == "Convergence" else 0 for t in FLOW_TYPE_ORDER],
+            textinfo="percent",
+            texttemplate="%{percent} (%{value:,.0f}h)",
+            hovertemplate="%{label}: %{percent} (%{value:,.0f}h)<extra></extra>",
             showlegend=(col == 1),
             row=1,
             col=col,
@@ -504,19 +566,59 @@ def litgrid_capacity_plan_chart(observed_2026: tuple[float, float] | None = None
     rows = [
         {"stage": "Pre-sync (historical)", "kind": "Observed", "direction": "Export", "capacity_mw": 350},
         {"stage": "Pre-sync (historical)", "kind": "Observed", "direction": "Import", "capacity_mw": 492},
-        {"stage": "Post-sync avg (since Feb 2025)", "kind": "Observed", "direction": "Export", "capacity_mw": 170},
-        {"stage": "Post-sync avg (since Feb 2025)", "kind": "Observed", "direction": "Import", "capacity_mw": 150},
-        {"stage": "Plan: end of 2026", "kind": "Litgrid's planned trajectory", "direction": "Export", "capacity_mw": 365},
-        {"stage": "Plan: end of 2026", "kind": "Litgrid's planned trajectory", "direction": "Import", "capacity_mw": 200},
-        {"stage": "Plan: from 2027", "kind": "Litgrid's planned trajectory", "direction": "Export", "capacity_mw": 500},
-        {"stage": "Plan: from 2027", "kind": "Litgrid's planned trajectory", "direction": "Import", "capacity_mw": 353},
+        {
+            "stage": "Post-sync avg (since Feb 2025)",
+            "kind": "Observed",
+            "direction": "Export",
+            "capacity_mw": 170,
+        },
+        {
+            "stage": "Post-sync avg (since Feb 2025)",
+            "kind": "Observed",
+            "direction": "Import",
+            "capacity_mw": 150,
+        },
+        {
+            "stage": "Plan: end of 2026",
+            "kind": "Litgrid's planned trajectory",
+            "direction": "Export",
+            "capacity_mw": 365,
+        },
+        {
+            "stage": "Plan: end of 2026",
+            "kind": "Litgrid's planned trajectory",
+            "direction": "Import",
+            "capacity_mw": 200,
+        },
+        {
+            "stage": "Plan: from 2027",
+            "kind": "Litgrid's planned trajectory",
+            "direction": "Export",
+            "capacity_mw": 500,
+        },
+        {
+            "stage": "Plan: from 2027",
+            "kind": "Litgrid's planned trajectory",
+            "direction": "Import",
+            "capacity_mw": 353,
+        },
     ]
     stage_order = ["Pre-sync (historical)", "Post-sync avg (since Feb 2025)"]
     if observed_2026 is not None:
         avg_export, avg_import = observed_2026
         rows += [
-            {"stage": "2026 so far (our data)", "kind": "Observed", "direction": "Export", "capacity_mw": avg_export},
-            {"stage": "2026 so far (our data)", "kind": "Observed", "direction": "Import", "capacity_mw": avg_import},
+            {
+                "stage": "2026 so far (our data)",
+                "kind": "Observed",
+                "direction": "Export",
+                "capacity_mw": avg_export,
+            },
+            {
+                "stage": "2026 so far (our data)",
+                "kind": "Observed",
+                "direction": "Import",
+                "capacity_mw": avg_import,
+            },
         ]
         stage_order.append("2026 so far (our data)")
     stage_order += ["Plan: end of 2026", "Plan: from 2027"]
@@ -531,7 +633,31 @@ def litgrid_capacity_plan_chart(observed_2026: tuple[float, float] | None = None
         pattern_shape_map={"Observed": "", "Litgrid's planned trajectory": "/"},
         barmode="group",
         title="LT–PL allocated capacity: before sync, since sync, and Litgrid's recovery plan",
-        labels={"capacity_mw": "Allocated capacity (MW)", "stage": "", "direction": "Direction", "kind": "Basis"},
+        labels={
+            "capacity_mw": "Allocated capacity (MW)",
+            "stage": "",
+            "direction": "Direction",
+            "kind": "Basis",
+        },
+    )
+    return fig
+
+
+def voltpath_convergence_chart(convergence: pd.DataFrame) -> go.Figure:
+    """Our own `share_converged`, 2024 vs 2025, per border pair - the Voltpath-data counterpart
+    to `ast_price_convergence_chart`. Takes a `pair`/`year`/`share_pct` frame (see
+    the notebook cell that builds it from `fetch_flows` + `convergence_summary`);
+    measures flow-direction convergence, not identical day-ahead price, so it's a
+    same-direction check against AST's figures, not a like-for-like reproduction.
+    """
+    fig = px.bar(
+        convergence,
+        x="pair",
+        y="share_pct",
+        color="year",
+        barmode="group",
+        title="Share of hours with convergent flow (our data), by border pair",
+        labels={"share_pct": "% of hours converged", "pair": "Border pair", "year": "Year"},
     )
     return fig
 
@@ -570,9 +696,7 @@ def ast_price_convergence_chart() -> go.Figure:
 
 def daily_rent_chart(congested: pd.DataFrame) -> go.Figure:
     """Daily total congestion rent, resampled from a `rent_eur`-bearing flow frame."""
-    daily = (
-        congested.set_index("datetime")["rent_eur"].resample("1D").sum().reset_index()
-    )
+    daily = congested.set_index("datetime")["rent_eur"].resample("1D").sum().reset_index()
     fig = px.bar(
         daily,
         x="datetime",
@@ -603,9 +727,7 @@ def concentration_pie_chart(
         row=1,
         col=1,
     )
-    fig.add_pie(
-        labels=year_split["label"], values=year_split["implied_value_eur"], row=1, col=2
-    )
+    fig.add_pie(labels=year_split["label"], values=year_split["implied_value_eur"], row=1, col=2)
     fig.update_layout(
         title="Top 10 borders vs. everyone else, ranked by congestion rent",
         width=1400,
@@ -647,11 +769,7 @@ def region_treemap(leaderboard: pd.DataFrame, year: str) -> go.Figure:
             colors.append(REGION_COLORS[region])
 
         for _, row in region_rows.iterrows():
-            parent = (
-                f"country:{region}:{row['country']}"
-                if pd.notna(row["country"])
-                else f"region:{region}"
-            )
+            parent = f"country:{region}:{row['country']}" if pd.notna(row["country"]) else f"region:{region}"
             ids.append(f"border:{row['border']}")
             labels.append(row["border"])
             parents.append(parent)
