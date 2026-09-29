@@ -70,6 +70,15 @@ def flow_type_summary(df: pd.DataFrame, flow_type: str) -> pd.DataFrame:
     return out
 
 
+def flow_type_shares(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-border % of hours in each flow_type - the data behind the web app's
+    "Flow Types per Border" chart (100%-stacked bar). One row per border,
+    one column per flow_type (values sum to 100 across a row).
+    """
+    hours = df.groupby(["border", "flow_type"])["duration_h"].sum().unstack(fill_value=0)
+    return (hours.div(hours.sum(axis=1), axis=0) * 100).reset_index()
+
+
 def convergence_summary(df: pd.DataFrame) -> pd.DataFrame:
     total_hours = df.groupby("border")["duration_h"].sum()
     conv = df[df["flow_type"] == "Convergence"]

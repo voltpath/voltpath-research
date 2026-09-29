@@ -259,6 +259,7 @@ def border_count_price_chart(
         title=title,
         labels={"n_borders": f"Borders {flow_type.lower()}", "datetime": "Time"},
         color_discrete_sequence=[FLOW_COLORS[flow_type]],
+        line_shape="hv",
     )
     fig.update_traces(name=f"Borders {flow_type.lower()}", showlegend=True)
     fig.add_scatter(
@@ -267,6 +268,7 @@ def border_count_price_chart(
         name="Avg price (EUR/MWh)",
         yaxis="y2",
         line=PRICE_LINE,
+        line_shape="hv",
     )
     fig.update_layout(
         yaxis2={"title": "Avg price (EUR/MWh)", "overlaying": "y", "side": "right"},
@@ -275,6 +277,27 @@ def border_count_price_chart(
     if peak_vline:
         fig.add_vline(x=peak_vline, line_dash="dash", annotation_text=peak_label)
     return fig
+
+
+def flow_type_stacked_bar(shares: pd.DataFrame, title: str) -> go.Figure:
+    """100%-stacked bar of per-border flow_type share (see `flow_type_shares`).
+
+    Matches the web app's "Flow Types per Border" chart (`CIFlowsBarChart`):
+    same stack order/colors (`FLOW_TYPE_ORDER`/`FLOW_COLORS`), 0-100% y-axis.
+    """
+    fig = go.Figure()
+    for flow_type in FLOW_TYPE_ORDER:
+        y = shares[flow_type] if flow_type in shares.columns else [0] * len(shares)
+        fig.add_bar(x=shares["border"], y=y, name=flow_type, marker_color=FLOW_COLORS[flow_type])
+    fig.update_layout(
+        barmode="stack",
+        title=title,
+        yaxis={"title": "Frequency (%)", "range": [0, 100]},
+        xaxis={"tickangle": -45},
+        width=1400,
+        height=600,
+    )
+    return _apply_web_style(fig)
 
 
 def congestion_ci_chart(df: pd.DataFrame, event: dict) -> go.Figure:
