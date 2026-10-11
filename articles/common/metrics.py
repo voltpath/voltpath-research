@@ -109,6 +109,41 @@ def congestion_rent(df: pd.DataFrame, peak_datetime) -> pd.Series:
     return pd.Series({"rent_eur": congested["value_eur"].abs().sum(), "n_borders": len(congested)})
 
 
+def congestion_rent_table(
+    df: pd.DataFrame, snapshots: dict[str, pd.Timestamp], window_h: float = 1.0
+) -> pd.DataFrame:
+    """Congestion rent (EUR) for several snapshots side by side, windowed the
+    same way as `zone_price_summary` (peak MTU / +/-`window_h` / all day) -
+    for comparing how "hot" several congestion peaks were, not just how wide.
+
+    `snapshots` maps a label (e.g. a date string) to the peak MTU timestamp
+    for that snapshot.
+    """
+    congested = df[df["flow_type"] == "Congestion"]
+
+    def rent(window: pd.DataFrame) -> float:
+        return window["value_eur"].abs().sum()
+
+    out = {}
+    for label, peak_datetime in snapshots.items():
+        peak_datetime = pd.Timestamp(peak_datetime)
+        half_window = pd.Timedelta(hours=window_h)
+        out[label] = pd.Series(
+            {
+                "Peak MTU": rent(congested[congested["datetime"] == peak_datetime]),
+                f"+/-{window_h:g}h": rent(
+                    congested[
+                        congested["datetime"].between(
+                            peak_datetime - half_window, peak_datetime + half_window
+                        )
+                    ]
+                ),
+                "All day": rent(congested[congested["datetime"].dt.date == peak_datetime.normalize().date()]),
+            }
+        )
+    return pd.DataFrame(out).map(lambda eur: f"{eur / 1000:,.1f}k")
+
+
 def zone_price_summary(
     df: pd.DataFrame,
     highlight_zones: set[str],

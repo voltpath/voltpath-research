@@ -35,7 +35,7 @@ from .charts import (
 )
 from .metrics import (
     before_after_convergence,
-    congestion_rent,
+    congestion_rent_table,
     convergence_summary,
     drop_ukraine,
     flow_type_shares,
@@ -84,8 +84,8 @@ __all__ = [
     "ccr_mechanism_treemap",
     "concentration_pie_chart",
     "congestion_ci_chart",
-    "congestion_rent",
     "congestion_rent_schematic",
+    "congestion_rent_table",
     "convergence_summary",
     "daily_rent_chart",
     "drop_ukraine",
