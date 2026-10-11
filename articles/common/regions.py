@@ -270,3 +270,31 @@ def border_ccr_mechanism(border: str) -> str:
     """CCR capacity-allocation mechanism for a border (see BORDER_CCR)."""
     zone_from, zone_to = border.split(" -> ")
     return BORDER_CCR.get(frozenset((zone_from, zone_to)), CCR_OTHER)
+
+
+# The 9 virtual bidding zones Core's Advanced Hybrid Coupling (AHC) go-live
+# (2026-06-11) added to its topology: 6 HVDC links to the Nordics plus the
+# DE-DK1, PL-LT and RO-BG external borders. BORDER_CCR/border_ccr_mechanism
+# isn't date-aware and still reports these under their pre-AHC regional
+# mechanism (Hansa/Baltic/SEE) - kept that way deliberately so existing
+# per-CCR charts aren't affected. Use this set alongside, not instead of,
+# border_ccr_mechanism when the question is specifically "is this one of
+# AHC's new VBZs".
+CORE_AHC_VBZ_BORDERS = [
+    ("DE_LU", "SE_4"),  # Baltic Cable
+    ("DE_LU", "NO_2"),  # NordLink
+    ("DK_1", "NL"),  # Cobra
+    ("DE_LU", "DK_2"),  # Kontek
+    ("NL", "NO_2"),  # NorNed
+    ("PL", "SE_4"),  # SwePol
+    ("DE_LU", "DK_1"),  # DE-DK1
+    ("LT", "PL"),  # PL-LT
+    ("BG", "RO"),  # RO-BG
+]
+CORE_AHC_VBZ_BORDER_SET = {frozenset(pair) for pair in CORE_AHC_VBZ_BORDERS}
+
+
+def is_core_ahc_vbz(border: str) -> bool:
+    """Whether `border` is one of Core AHC's 9 new virtual bidding zones (see CORE_AHC_VBZ_BORDERS)."""
+    zone_from, zone_to = border.split(" -> ")
+    return frozenset((zone_from, zone_to)) in CORE_AHC_VBZ_BORDER_SET

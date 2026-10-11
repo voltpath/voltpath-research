@@ -279,6 +279,13 @@ def border_count_price_chart(
     return fig
 
 
+# Shared by flow_type_stacked_bar and flow_type_grouped_bar so every CCR chart
+# - solo or combined - renders at the same height and same per-bar pixel width,
+# rather than stretching to fill a fixed figure width.
+FLOW_TYPE_BAR_PX = 54
+FLOW_TYPE_CHART_HEIGHT = 400
+
+
 def flow_type_stacked_bar(shares: pd.DataFrame, title: str) -> go.Figure:
     """100%-stacked bar of per-border flow_type share (see `flow_type_shares`).
 
@@ -294,8 +301,56 @@ def flow_type_stacked_bar(shares: pd.DataFrame, title: str) -> go.Figure:
         title=title,
         yaxis={"title": "Frequency (%)", "range": [0, 100]},
         xaxis={"tickangle": -45},
-        width=1400,
-        height=600,
+        width=max(500, FLOW_TYPE_BAR_PX * len(shares)),
+        height=FLOW_TYPE_CHART_HEIGHT,
+        bargap=0.3,
+    )
+    return _apply_web_style(fig)
+
+
+def flow_type_grouped_bar(groups: list[tuple[str, pd.DataFrame]], title: str) -> go.Figure:
+    """`flow_type_stacked_bar`, but combining several CCRs' borders into one chart,
+    bracket-labelled per CCR - for mechanisms (e.g. NTC-radial, NTC-lineset) shared
+    by multiple CCRs, matching scratch/media/price-coupled-ntc-radial-*.png.
+
+    `groups` is `[(ccr_label, shares_df), ...]` in display order (each
+    `shares_df` from `flow_type_shares`); a bracket line is only drawn over
+    groups with 3+ borders (2 or fewer reads fine from the centered label alone).
+    """
+    all_shares = pd.concat([shares for _, shares in groups], ignore_index=True)
+    borders = all_shares["border"].tolist()
+
+    fig = go.Figure()
+    for flow_type in FLOW_TYPE_ORDER:
+        y = all_shares[flow_type] if flow_type in all_shares.columns else [0] * len(all_shares)
+        fig.add_bar(x=borders, y=y, name=flow_type, marker_color=FLOW_COLORS[flow_type])
+
+    pos = 0
+    for label, shares in groups:
+        n = len(shares)
+        start, end = pos, pos + n - 1
+        if n >= 3:
+            fig.add_shape(
+                type="line",
+                x0=start - 0.4,
+                x1=end + 0.4,
+                y0=108,
+                y1=108,
+                xref="x",
+                yref="y",
+                line={"color": "#1F2937", "width": 1.5},
+            )
+        fig.add_annotation(x=(start + end) / 2, y=114, text=label, showarrow=False, font={"size": 13})
+        pos += n
+
+    fig.update_layout(
+        barmode="stack",
+        title=title,
+        yaxis={"title": "Frequency (%)", "range": [0, 122], "tickvals": [0, 20, 40, 60, 80, 100]},
+        xaxis={"tickangle": -45},
+        width=max(500, FLOW_TYPE_BAR_PX * len(all_shares)),
+        height=FLOW_TYPE_CHART_HEIGHT,
+        bargap=0.3,
     )
     return _apply_web_style(fig)
 

@@ -98,6 +98,65 @@ def drop_ukraine(leaderboard: pd.DataFrame) -> pd.DataFrame:
     return leaderboard[~leaderboard["border"].str.contains("UA_IPS")]
 
 
+def congestion_rent(df: pd.DataFrame, peak_datetime) -> pd.Series:
+    """Congestion rent (EUR) and border count at one MTU.
+
+    Same definition as `flow_type_summary`'s implied_value_eur - abs(price_delta
+    x net_flow_mw x duration_h) - but for a single timestamp rather than a whole
+    leaderboard, for spotlighting one peak-congestion moment.
+    """
+    congested = df[(df["datetime"] == peak_datetime) & (df["flow_type"] == "Congestion")]
+    return pd.Series({"rent_eur": congested["value_eur"].abs().sum(), "n_borders": len(congested)})
+
+
+def zone_price_summary(
+    df: pd.DataFrame,
+    highlight_zones: set[str],
+    highlight_label: str,
+    peak_datetime,
+    window_h: float = 1.0,
+) -> pd.DataFrame:
+    """Average day-ahead price, highlighted zones vs. the rest of Europe, at the
+    peak MTU, a +/-`window_h` window around it, and the full day - for
+    spotlighting a regional price decoupling around one congestion peak.
+
+    `df` is a flows dataframe; zonal prices are derived from its per-border
+    price_from/price_to columns (deduped per zone/timestamp, since every
+    border touching a zone carries the same price for it).
+    """
+    prices = pd.concat(
+        [
+            df[["datetime", "bidding_zone_from", "price_from"]].rename(
+                columns={"bidding_zone_from": "zone", "price_from": "price"}
+            ),
+            df[["datetime", "bidding_zone_to", "price_to"]].rename(
+                columns={"bidding_zone_to": "zone", "price_to": "price"}
+            ),
+        ]
+    ).drop_duplicates(["datetime", "zone"])
+
+    def avg(window: pd.DataFrame) -> pd.Series:
+        return pd.Series(
+            {
+                "All BZs": window["price"].mean(),
+                highlight_label: window[window["zone"].isin(highlight_zones)]["price"].mean(),
+                f"Excl. {highlight_label}": window[~window["zone"].isin(highlight_zones)]["price"].mean(),
+            }
+        )
+
+    peak_datetime = pd.Timestamp(peak_datetime)
+    half_window = pd.Timedelta(hours=window_h)
+    return pd.DataFrame(
+        {
+            "Peak MTU": avg(prices[prices["datetime"] == peak_datetime]),
+            f"+/-{window_h:g}h": avg(
+                prices[prices["datetime"].between(peak_datetime - half_window, peak_datetime + half_window)]
+            ),
+            "All day": avg(prices[prices["datetime"].dt.date == peak_datetime.normalize().date()]),
+        }
+    ).T
+
+
 def top_vs_rest(
     leaderboard: pd.DataFrame, metric: str = "implied_value_eur", top_n: int = 10
 ) -> pd.DataFrame:
