@@ -124,6 +124,14 @@ def border_region(border: str) -> str:
     return region_from if region_from == region_to else "Cross-region"
 
 
+BALTIC_ZONES = {"EE", "LV", "LT"}
+
+
+def is_baltic_border(border: str) -> bool:
+    """Whether either side of the border is a Baltic zone (see BALTIC_ZONES)."""
+    return any(zone in BALTIC_ZONES for zone in border.split(" -> "))
+
+
 _ZONE_COUNTRY_COUNTS = Counter(ZONE_COUNTRIES.values())
 # Countries split across several bidding zones (Norway NO_1..5, Italy IT_*,
 # etc.) - only these are worth a country-level treemap node between region
@@ -142,11 +150,151 @@ def border_country(border: str) -> str | None:
     zone_from, zone_to = border.split(" -> ")
     country_from = ZONE_COUNTRIES.get(zone_from, zone_from)
     country_to = ZONE_COUNTRIES.get(zone_to, zone_to)
-    if (
-        country_from not in MULTI_ZONE_COUNTRIES
-        and country_to not in MULTI_ZONE_COUNTRIES
-    ):
+    if country_from not in MULTI_ZONE_COUNTRIES and country_to not in MULTI_ZONE_COUNTRIES:
         return None
-    return (
-        country_from if country_from == country_to else f"{country_from} - {country_to}"
-    )
+    return country_from if country_from == country_to else f"{country_from} - {country_to}"
+
+
+CCR_OTHER = "Other (not in Iacopo's CCR breakdown)"
+
+# Real per-border CCR capacity-allocation mechanism, transcribed from Iacopo
+# Bertelli's "Counterintuitive Flows in 2023, Part 3" (LinkedIn), grouped by
+# mechanism rather than geography - see scratch/media/*.png for the source
+# charts. Unlike ZONE_REGIONS this is keyed by the actual border pair, not a
+# per-zone label, since real CCR membership overlaps (Germany-Luxembourg sits
+# in both Core and Hansa, France in both Core and SWE, etc.) in a way a
+# one-region-per-zone dict can't represent.
+#
+# Italy North's borders are folded into Core here rather than kept as their
+# own 2023-era group, since ACER decisions 04/2024 and 10/2025 merge the two
+# into a single CCR - officially renamed "Central Europe", though "Core" is
+# still the term in common use (day-ahead go-live for the merged region isn't
+# until 2027). Borders outside Iacopo's breakdown (Western Balkans, Ukraine,
+# Sardinia, ...) fall back to CCR_OTHER.
+CCR_MECHANISM_COLORS = {
+    "Switzerland (explicit allocation)": "#B0B0B0",
+    "SWE (price-coupled NTC, radial)": "#A9D9B0",
+    "GRIT (price-coupled NTC, radial)": "#93A6DE",
+    "SEE (price-coupled NTC, radial)": "#B58FC4",
+    "Baltic (price-coupled NTC, radial)": "#D98888",
+    "Core (price-coupled, flow-based)": "#7EC8D8",
+    "Hansa (price-coupled NTC, lineset)": "#F0A857",
+    "Nordic (price-coupled NTC, lineset)": "#8FBF87",
+    CCR_OTHER: "#6B818C",
+}
+
+_CCR_BORDERS: dict[str, list[tuple[str, str]]] = {
+    "Switzerland (explicit allocation)": [
+        ("AT", "CH"),
+        ("CH", "DE_LU"),
+        ("CH", "FR"),
+        ("CH", "IT_NORD"),
+    ],
+    "SWE (price-coupled NTC, radial)": [("ES", "PT"), ("ES", "FR")],
+    "GRIT (price-coupled NTC, radial)": [
+        ("IT_CALA", "IT_SICI"),
+        ("IT_CALA", "IT_SUD"),
+        ("IT_CNOR", "IT_CSUD"),
+        ("IT_CNOR", "IT_NORD"),
+        ("IT_CSUD", "IT_SUD"),
+        ("GR", "IT_SUD"),
+    ],
+    "SEE (price-coupled NTC, radial)": [("BG", "RO")],
+    "Baltic (price-coupled NTC, radial)": [
+        ("EE", "FI"),
+        ("EE", "LV"),
+        ("LT", "LV"),
+        ("LT", "SE_4"),
+        ("LT", "PL"),
+    ],
+    "Core (price-coupled, flow-based)": [
+        ("AT", "CZ"),
+        ("AT", "DE_LU"),
+        ("AT", "HU"),
+        ("AT", "SI"),
+        ("BE", "DE_LU"),
+        ("BE", "FR"),
+        ("BE", "NL"),
+        ("CZ", "DE_LU"),
+        ("CZ", "SK"),
+        ("DE_LU", "FR"),
+        ("DE_LU", "NL"),
+        ("HR", "HU"),
+        ("HR", "SI"),
+        ("HU", "RO"),
+        ("HU", "SI"),
+        ("HU", "SK"),
+        ("CZ", "PL"),
+        ("DE_LU", "PL"),
+        ("PL", "SK"),
+        ("AT", "IT_NORD"),
+        ("FR", "IT_NORD"),
+        ("IT_NORD", "SI"),
+    ],
+    "Hansa (price-coupled NTC, lineset)": [
+        ("DE_LU", "DK_1"),
+        ("DE_LU", "DK_2"),
+        ("DE_LU", "NO_2"),
+        ("DE_LU", "SE_4"),
+        ("DK_1", "NL"),
+        ("NL", "NO_2"),
+        ("PL", "SE_4"),
+    ],
+    "Nordic (price-coupled NTC, lineset)": [
+        ("DK_1", "DK_2"),
+        ("DK_1", "NO_2"),
+        ("DK_1", "SE_3"),
+        ("DK_2", "SE_4"),
+        ("FI", "SE_1"),
+        ("FI", "SE_3"),
+        ("NO_1", "NO_2"),
+        ("NO_1", "NO_3"),
+        ("NO_1", "NO_5"),
+        ("NO_1", "SE_3"),
+        ("NO_2", "NO_5"),
+        ("NO_3", "NO_4"),
+        ("NO_3", "NO_5"),
+        ("NO_3", "SE_2"),
+        ("NO_4", "SE_1"),
+        ("NO_4", "SE_2"),
+        ("SE_1", "SE_2"),
+        ("SE_2", "SE_3"),
+        ("SE_3", "SE_4"),
+    ],
+}
+
+BORDER_CCR = {frozenset(pair): mechanism for mechanism, pairs in _CCR_BORDERS.items() for pair in pairs}
+
+
+def border_ccr_mechanism(border: str) -> str:
+    """CCR capacity-allocation mechanism for a border (see BORDER_CCR)."""
+    zone_from, zone_to = border.split(" -> ")
+    return BORDER_CCR.get(frozenset((zone_from, zone_to)), CCR_OTHER)
+
+
+# The 9 virtual bidding zones Core's Advanced Hybrid Coupling (AHC) go-live
+# (2026-06-11) added to its topology: 6 HVDC links to the Nordics plus the
+# DE-DK1, PL-LT and RO-BG external borders. BORDER_CCR/border_ccr_mechanism
+# isn't date-aware and still reports these under their pre-AHC regional
+# mechanism (Hansa/Baltic/SEE) - kept that way deliberately so existing
+# per-CCR charts aren't affected. Use this set alongside, not instead of,
+# border_ccr_mechanism when the question is specifically "is this one of
+# AHC's new VBZs".
+CORE_AHC_VBZ_BORDERS = [
+    ("DE_LU", "SE_4"),  # Baltic Cable
+    ("DE_LU", "NO_2"),  # NordLink
+    ("DK_1", "NL"),  # Cobra
+    ("DE_LU", "DK_2"),  # Kontek
+    ("NL", "NO_2"),  # NorNed
+    ("PL", "SE_4"),  # SwePol
+    ("DE_LU", "DK_1"),  # DE-DK1
+    ("LT", "PL"),  # PL-LT
+    ("BG", "RO"),  # RO-BG
+]
+CORE_AHC_VBZ_BORDER_SET = {frozenset(pair) for pair in CORE_AHC_VBZ_BORDERS}
+
+
+def is_core_ahc_vbz(border: str) -> bool:
+    """Whether `border` is one of Core AHC's 9 new virtual bidding zones (see CORE_AHC_VBZ_BORDERS)."""
+    zone_from, zone_to = border.split(" -> ")
+    return frozenset((zone_from, zone_to)) in CORE_AHC_VBZ_BORDER_SET

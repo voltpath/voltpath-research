@@ -5,8 +5,20 @@ import pandas as pd
 
 def hourly_border_counts(df: pd.DataFrame, flow_type: str) -> pd.DataFrame:
     subset = df[df["flow_type"] == flow_type]
-    return (
-        subset.groupby("datetime")["border"].nunique().rename("n_borders").reset_index()
+    return subset.groupby("datetime")["border"].nunique().rename("n_borders").reset_index()
+
+
+def before_after_convergence(df: pd.DataFrame, event_date: str) -> pd.Series:
+    """Mean `share_converged` before vs. after `event_date` - the mechanical
+    before/after check every structural-change notebook runs first.
+    """
+    before = df[df["datetime"] < event_date]
+    after = df[df["datetime"] >= event_date]
+    return pd.Series(
+        {
+            "share_converged_before": convergence_summary(before)["share_converged"].mean(),
+            "share_converged_after": convergence_summary(after)["share_converged"].mean(),
+        }
     )
 
 
@@ -58,12 +70,19 @@ def flow_type_summary(df: pd.DataFrame, flow_type: str) -> pd.DataFrame:
     return out
 
 
+def flow_type_shares(df: pd.DataFrame) -> pd.DataFrame:
+    """Per-border % of hours in each flow_type - the data behind the web app's
+    "Flow Types per Border" chart (100%-stacked bar). One row per border,
+    one column per flow_type (values sum to 100 across a row).
+    """
+    hours = df.groupby(["border", "flow_type"])["duration_h"].sum().unstack(fill_value=0)
+    return (hours.div(hours.sum(axis=1), axis=0) * 100).reset_index()
+
+
 def convergence_summary(df: pd.DataFrame) -> pd.DataFrame:
     total_hours = df.groupby("border")["duration_h"].sum()
     conv = df[df["flow_type"] == "Convergence"]
-    out = conv.groupby("border").agg(
-        volume_mwh=("volume_mwh", "sum"), converged_hours=("duration_h", "sum")
-    )
+    out = conv.groupby("border").agg(volume_mwh=("volume_mwh", "sum"), converged_hours=("duration_h", "sum"))
     out["share_converged"] = out["converged_hours"] / total_hours.reindex(out.index)
     return out.sort_values("volume_mwh", ascending=False).reset_index()
 
@@ -77,6 +96,100 @@ def drop_ukraine(leaderboard: pd.DataFrame) -> pd.DataFrame:
     reasons unrelated to everything else on it.
     """
     return leaderboard[~leaderboard["border"].str.contains("UA_IPS")]
+
+
+def congestion_rent(df: pd.DataFrame, peak_datetime) -> pd.Series:
+    """Congestion rent (EUR) and border count at one MTU.
+
+    Same definition as `flow_type_summary`'s implied_value_eur - abs(price_delta
+    x net_flow_mw x duration_h) - but for a single timestamp rather than a whole
+    leaderboard, for spotlighting one peak-congestion moment.
+    """
+    congested = df[(df["datetime"] == peak_datetime) & (df["flow_type"] == "Congestion")]
+    return pd.Series({"rent_eur": congested["value_eur"].abs().sum(), "n_borders": len(congested)})
+
+
+def congestion_rent_table(
+    df: pd.DataFrame, snapshots: dict[str, pd.Timestamp], window_h: float = 1.0
+) -> pd.DataFrame:
+    """Congestion rent (EUR) for several snapshots side by side, windowed the
+    same way as `zone_price_summary` (peak MTU / +/-`window_h` / all day) -
+    for comparing how "hot" several congestion peaks were, not just how wide.
+
+    `snapshots` maps a label (e.g. a date string) to the peak MTU timestamp
+    for that snapshot.
+    """
+    congested = df[df["flow_type"] == "Congestion"]
+
+    def rent(window: pd.DataFrame) -> float:
+        return window["value_eur"].abs().sum()
+
+    out = {}
+    for label, peak_datetime in snapshots.items():
+        peak_datetime = pd.Timestamp(peak_datetime)
+        half_window = pd.Timedelta(hours=window_h)
+        out[label] = pd.Series(
+            {
+                "Peak MTU": rent(congested[congested["datetime"] == peak_datetime]),
+                f"+/-{window_h:g}h": rent(
+                    congested[
+                        congested["datetime"].between(
+                            peak_datetime - half_window, peak_datetime + half_window
+                        )
+                    ]
+                ),
+                "All day": rent(congested[congested["datetime"].dt.date == peak_datetime.normalize().date()]),
+            }
+        )
+    return pd.DataFrame(out).map(lambda eur: f"{eur / 1000:,.1f}k")
+
+
+def zone_price_summary(
+    df: pd.DataFrame,
+    highlight_zones: set[str],
+    highlight_label: str,
+    peak_datetime,
+    window_h: float = 1.0,
+) -> pd.DataFrame:
+    """Average day-ahead price, highlighted zones vs. the rest of Europe, at the
+    peak MTU, a +/-`window_h` window around it, and the full day - for
+    spotlighting a regional price decoupling around one congestion peak.
+
+    `df` is a flows dataframe; zonal prices are derived from its per-border
+    price_from/price_to columns (deduped per zone/timestamp, since every
+    border touching a zone carries the same price for it).
+    """
+    prices = pd.concat(
+        [
+            df[["datetime", "bidding_zone_from", "price_from"]].rename(
+                columns={"bidding_zone_from": "zone", "price_from": "price"}
+            ),
+            df[["datetime", "bidding_zone_to", "price_to"]].rename(
+                columns={"bidding_zone_to": "zone", "price_to": "price"}
+            ),
+        ]
+    ).drop_duplicates(["datetime", "zone"])
+
+    def avg(window: pd.DataFrame) -> pd.Series:
+        return pd.Series(
+            {
+                "All BZs": window["price"].mean(),
+                highlight_label: window[window["zone"].isin(highlight_zones)]["price"].mean(),
+                f"Excl. {highlight_label}": window[~window["zone"].isin(highlight_zones)]["price"].mean(),
+            }
+        )
+
+    peak_datetime = pd.Timestamp(peak_datetime)
+    half_window = pd.Timedelta(hours=window_h)
+    return pd.DataFrame(
+        {
+            "Peak MTU": avg(prices[prices["datetime"] == peak_datetime]),
+            f"+/-{window_h:g}h": avg(
+                prices[prices["datetime"].between(peak_datetime - half_window, peak_datetime + half_window)]
+            ),
+            "All day": avg(prices[prices["datetime"].dt.date == peak_datetime.normalize().date()]),
+        }
+    ).T
 
 
 def top_vs_rest(

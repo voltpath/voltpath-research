@@ -17,4 +17,12 @@ dev = [
     "nbstripout>=0.7",
     "kaleido>=0.2",
     "nbconvert>=7",
+    "ruff>=0.16.9",
 ]
+
+[tool.ruff]
+extend-include = ["*.ipynb"]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
