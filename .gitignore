@@ -12,5 +12,6 @@ scratch/
 skills-lock.json
 articles/.cache/
 articles/*/output/
+articles/*/*/output/
 teaching/
 CLAUDE.md
