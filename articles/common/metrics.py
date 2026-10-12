@@ -144,6 +144,41 @@ def congestion_rent_table(
     return pd.DataFrame(out).map(lambda eur: f"{eur / 1000:,.1f}k")
 
 
+def zone_border_breakdown(df: pd.DataFrame, zone: str, peak_datetime) -> pd.DataFrame:
+    """Per-border breakdown for one zone at one MTU, oriented from that zone's
+    perspective (export_mw > 0 means `zone` is exporting on that border),
+    plus a Total row - for spotlighting one zone's net position during a
+    congestion peak (e.g. Poland acting as a transit hub).
+
+    `value_eur` is each border's congestion rent (price gap x volume), signed
+    by export direction - positive while `zone` exports on that border
+    (selling into the higher price), negative while it imports (paying it) -
+    and formatted like `congestion_rent_table`'s (e.g. "41.9k").
+    """
+    peak_datetime = pd.Timestamp(peak_datetime)
+    touches_zone = (df["bidding_zone_from"] == zone) | (df["bidding_zone_to"] == zone)
+    rows = df[(df["datetime"] == peak_datetime) & touches_zone].copy()
+    is_from = rows["bidding_zone_from"] == zone
+
+    export_mw = rows["net_flow_mw"].where(is_from, -rows["net_flow_mw"])
+    out = pd.DataFrame(
+        {
+            "counterparty": rows["bidding_zone_from"].where(~is_from, rows["bidding_zone_to"]),
+            "export_mw": export_mw,
+            "zone_price": rows["price_from"].where(is_from, rows["price_to"]),
+            "counterparty_price": rows["price_to"].where(is_from, rows["price_from"]),
+            "value_eur": rows["value_eur"] * export_mw.apply(lambda mw: 1 if mw >= 0 else -1),
+        }
+    ).sort_values("export_mw", ascending=False)
+
+    total = pd.DataFrame(
+        [{"counterparty": "Total", "export_mw": out["export_mw"].sum(), "value_eur": out["value_eur"].sum()}]
+    )
+    out = pd.concat([out, total], ignore_index=True)
+    out["value_eur"] = out["value_eur"].map(lambda eur: f"{eur / 1000:,.1f}k")
+    return out
+
+
 def zone_price_summary(
     df: pd.DataFrame,
     highlight_zones: set[str],

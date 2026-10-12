@@ -5,12 +5,13 @@ Research articles on European power grid data (ENTSO-E), each shipped as a singl
 ## Articles
 
 - [`bertellis-flow-diagnostics/`](articles/bertellis-flow-diagnostics/) – reproduces Iacopo Bertelli's counter-intuitive flows analysis, plus a counter-intuitive flow leaderboard.
-- [`congestion-analysis/`](articles/congestion-analysis/) – estimates congestion rent from Voltpath data, with leaderboards by border, region, and country.
+- [`ci-flows/`](articles/ci-flows/) – counter-intuitive flows in 2026, following up on Bertelli's series.
+- [`congestion-analysis/`](articles/congestion-analysis/) – estimates congestion rent from Voltpath data, with leaderboards by border, region, and country, and a 2026 case study of the year's most widely congested moments.
 - [`baltic-sync-litpol/`](articles/baltic-sync-litpol/) – Baltic states synchronisation, 2025-02, traced to the LT&ndash;PL (LitPol) link's capacity-recovery plan.
-- [`flamanville-3-connection/`](articles/flamanville-3-connection/) – Flamanville 3 EPR grid connection, 2024-12-21.
-- [`core-ahc-golive/`](articles/core-ahc-golive/) – Core "Advanced Hybrid Coupling" go-live, 2026-06-10/11.
 
-Shared fetch/analysis helpers live in [`articles/common.py`](articles/common.py) – read it if you want to see exactly how flow types, costs, and leaderboards are computed.
+Drafts in progress, not yet finished: [`ideas/flamanville-3-connection/`](articles/ideas/flamanville-3-connection/) (Flamanville 3 EPR grid connection, 2024-12-21) and [`ideas/core-ahc-golive/`](articles/ideas/core-ahc-golive/) (Core "Advanced Hybrid Coupling" go-live, 2026-06-10/11).
+
+Shared fetch/analysis helpers live in [`articles/common/`](articles/common/) – read it if you want to see exactly how flow types, costs, and leaderboards are computed.
 
 ## Reading an article
 

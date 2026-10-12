@@ -2,4 +2,4 @@
 
 Points the same reusable flow-analysis functions used in [bertellis-flow-diagnostics](../bertellis-flow-diagnostics/) at Core CCR's market-coupling methodology change on its external borders, to see whether it shows up mechanically in congestion, counter-intuitive flow, and convergence data.
 
-Open [`core_ahc_golive.ipynb`](core_ahc_golive.ipynb) and run top to bottom. See the root [README](../../README.md) for setup.
+Open [`core_ahc_golive.ipynb`](core_ahc_golive.ipynb) and run top to bottom. See the root [README](../../../README.md) for setup.
