@@ -43,6 +43,7 @@ from .metrics import (
     hourly_border_counts,
     peak,
     top_vs_rest,
+    zone_border_breakdown,
     zone_price_summary,
 )
 from .regions import (
@@ -109,5 +110,6 @@ __all__ = [
     "top_n_bar",
     "top_vs_rest",
     "voltpath_convergence_chart",
+    "zone_border_breakdown",
     "zone_price_summary",
 ]

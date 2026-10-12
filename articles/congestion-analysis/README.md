@@ -2,9 +2,12 @@
 
 Estimates the **congestion rent** of Europe's grid bottlenecks from Voltpath data (`|price delta| x |flow| x duration`) &ndash; the price gap x volume the market captures while a border stays constrained, which is not the same thing as economic cost or lost welfare.
 
-Builds a rolling 30-day leaderboard of the highest-rent borders, a case study of 2025's most widely congested moment, monthly and yearly leaderboards across four competing metrics, a concentration check on whether a few borders really dominate the total, and a breakdown by region and country.
+Two notebooks:
 
-Open [`congestion_analysis.ipynb`](congestion_analysis.ipynb) and run top to bottom. See the root [README](../../README.md) for setup.
+- [`congestion_analysis-2025.ipynb`](congestion_analysis-2025.ipynb) &ndash; a rolling 30-day leaderboard of the highest-rent borders, a case study of 2025's most widely congested moment, monthly and yearly leaderboards across four competing metrics, a concentration check on whether a few borders really dominate the total, and a breakdown by region and country.
+- [`congestion_analysis-2026.ipynb`](congestion_analysis-2026.ipynb) &ndash; a case study of 2026's three most widely congested moments (Baltics+FI in Feb, Core Europe in Jun, Balkans/Italy in Sep), the weather/supply/market-design factors behind each, and a congestion-rent comparison across them showing that wide congestion (many borders flagged) doesn't necessarily mean economically significant congestion (high rent).
+
+Open either and run top to bottom. See the root [README](../../README.md) for setup.
 
 `media/` holds the reference screenshot of the VoltPath dashboard embedded in the notebook; charts the notebook generates are written to a gitignored `output/`.
 
