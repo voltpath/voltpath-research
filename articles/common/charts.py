@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from .metrics import hourly_border_counts
+from .metrics import SEASON_ORDER, hourly_border_counts, period_label
 from .regions import (
     CCR_MECHANISM_COLORS,
     REGION_COLORS,
@@ -135,6 +135,31 @@ def top_n_bar(
     )
     fig.update_layout(yaxis={"autorange": "reversed"})
     return fig
+
+
+def net_position_bar(
+    position: pd.DataFrame, title: str, category_order: list[str] | None = None
+) -> go.Figure:
+    """Grouped bar of % hours each border's `bidding_zone_from` net-exports, by period
+    (from `net_position_by_period`) - the direction-of-flow counterpart to
+    `flow_type_stacked_bar`'s per-border flow-type mix, for spotting a seasonal
+    reversal that a single all-time `flow_duration_curve` split averages away.
+    """
+    colors = _border_color_map(position["border"].unique().tolist())
+    fig = px.bar(
+        position,
+        x="period",
+        y="pct_exporting",
+        color="border",
+        barmode="group",
+        title=title,
+        labels={"pct_exporting": "Hours net-exporting (%)", "period": "Period"},
+        color_discrete_map=colors,
+        category_orders={"period": category_order} if category_order else None,
+    )
+    fig.add_hline(y=50, line={"color": "#9CA3AF", "dash": "dot"})
+    fig.update_layout(xaxis={"tickangle": -45})
+    return _apply_web_style(fig)
 
 
 def congestion_rent_schematic() -> go.Figure:
@@ -352,6 +377,47 @@ def flow_type_grouped_bar(groups: list[tuple[str, pd.DataFrame]], title: str) ->
         height=FLOW_TYPE_CHART_HEIGHT,
         bargap=0.3,
     )
+    return _apply_web_style(fig)
+
+
+def flow_type_stacked_bar_by_period(df: pd.DataFrame, freq: str, title: str) -> go.Figure:
+    """100%-stacked bar of flow_type share per period (month or season), one subplot
+    per border - the seasonal counterpart to `flow_type_stacked_bar`, which only shows
+    the all-time mix. `freq` is "M" or "season" (see `period_label`).
+
+    Not built on `flow_type_grouped_bar`: that function's x-axis is the border name,
+    which only works when every group has distinct borders (e.g. comparing CCRs). Here
+    the same borders repeat in every period, so Plotly would collapse same-named bars
+    across periods onto a single x position - hence the per-border subplot instead.
+    """
+    working = df.assign(period=period_label(df["datetime"], freq))
+    order = SEASON_ORDER if freq == "season" else sorted(working["period"].unique())
+    borders = sorted(working["border"].unique())
+
+    fig = make_subplots(rows=1, cols=len(borders), subplot_titles=borders, shared_yaxes=True)
+    for col, border in enumerate(borders, start=1):
+        subset = working[working["border"] == border]
+        hours = subset.groupby(["period", "flow_type"])["duration_h"].sum().unstack(fill_value=0)
+        shares = (hours.div(hours.sum(axis=1), axis=0) * 100).reindex(order)
+        for flow_type in FLOW_TYPE_ORDER:
+            y = shares[flow_type] if flow_type in shares.columns else [0] * len(shares)
+            fig.add_bar(
+                x=shares.index,
+                y=y,
+                name=flow_type,
+                marker_color=FLOW_COLORS[flow_type],
+                showlegend=(col == 1),
+                row=1,
+                col=col,
+            )
+    fig.update_layout(
+        barmode="stack",
+        title=title,
+        width=max(500, 300 * len(borders)),
+        height=FLOW_TYPE_CHART_HEIGHT,
+    )
+    fig.update_xaxes(tickangle=-45)
+    fig.update_yaxes(title="Frequency (%)", range=[0, 100], row=1, col=1)
     return _apply_web_style(fig)
 
 
