@@ -2,6 +2,58 @@
 
 import pandas as pd
 
+SEASON_LABELS = {
+    12: "Winter (DJF)",
+    1: "Winter (DJF)",
+    2: "Winter (DJF)",
+    3: "Spring (MAM)",
+    4: "Spring (MAM)",
+    5: "Spring (MAM)",
+    6: "Summer (JJA)",
+    7: "Summer (JJA)",
+    8: "Summer (JJA)",
+    9: "Autumn (SON)",
+    10: "Autumn (SON)",
+    11: "Autumn (SON)",
+}
+SEASON_ORDER = ["Winter (DJF)", "Spring (MAM)", "Summer (JJA)", "Autumn (SON)"]
+
+
+def period_label(dt: pd.Series, freq: str) -> pd.Series:
+    """Calendar-month ("2026-01") or meteorological-season ("Winter (DJF)") label for a
+    datetime column - the period grouping shared by `net_position_by_period` and any
+    per-period `flow_type_shares` breakdown. `freq` is "M" or "season".
+    """
+    if freq == "season":
+        return dt.dt.month.map(SEASON_LABELS)
+    return dt.dt.to_period("M").astype(str)
+
+
+def net_position_by_period(df: pd.DataFrame, freq: str) -> pd.DataFrame:
+    """Share of hours each border's `bidding_zone_from` is net-exporting
+    (net_flow_mw > 0), grouped by `freq` ("M" or "season") - the seasonal
+    breakdown of the direction split that `flow_duration_curve` averages
+    away into one all-time curve.
+    """
+    out = df.copy()
+    out["period"] = period_label(out["datetime"], freq)
+    return (
+        out.groupby(["border", "period"])["net_flow_mw"]
+        .apply(lambda s: (s > 0).mean() * 100)
+        .rename("pct_exporting")
+        .reset_index()
+    )
+
+
+def net_volume_by_period(df: pd.DataFrame, freq: str) -> pd.DataFrame:
+    """Average signed net_flow_mw per border, grouped by `freq` ("M" or "season") -
+    the quantitative counterpart to `net_position_by_period`'s % of hours exporting,
+    since a border can export 90% of hours at a trickle or 51% of hours at full tilt.
+    """
+    out = df.copy()
+    out["period"] = period_label(out["datetime"], freq)
+    return out.groupby(["border", "period"])["net_flow_mw"].mean().rename("avg_net_flow_mw").reset_index()
+
 
 def hourly_border_counts(df: pd.DataFrame, flow_type: str) -> pd.DataFrame:
     subset = df[df["flow_type"] == flow_type]
@@ -139,6 +191,37 @@ def congestion_rent_table(
                     ]
                 ),
                 "All day": rent(congested[congested["datetime"].dt.date == peak_datetime.normalize().date()]),
+            }
+        )
+    return pd.DataFrame(out).map(lambda eur: f"{eur / 1000:,.1f}k")
+
+
+def ci_flow_value_table(
+    df: pd.DataFrame, snapshots: dict[str, pd.Timestamp], window_h: float = 1.0
+) -> pd.DataFrame:
+    """Implied value (EUR) of Counter-intuitive flows for several snapshots side
+    by side, windowed like `congestion_rent_table` (peak MTU / +/-`window_h` /
+    all day) - for comparing how "hot" several counter-intuitive peaks were.
+
+    `snapshots` maps a label (e.g. a date string) to the peak MTU timestamp
+    for that snapshot.
+    """
+    ci = df[df["flow_type"] == "Counter-intuitive"]
+
+    def value(window: pd.DataFrame) -> float:
+        return window["value_eur"].abs().sum()
+
+    out = {}
+    for label, peak_datetime in snapshots.items():
+        peak_datetime = pd.Timestamp(peak_datetime)
+        half_window = pd.Timedelta(hours=window_h)
+        out[label] = pd.Series(
+            {
+                "Peak MTU": value(ci[ci["datetime"] == peak_datetime]),
+                f"+/-{window_h:g}h": value(
+                    ci[ci["datetime"].between(peak_datetime - half_window, peak_datetime + half_window)]
+                ),
+                "All day": value(ci[ci["datetime"].dt.date == peak_datetime.normalize().date()]),
             }
         )
     return pd.DataFrame(out).map(lambda eur: f"{eur / 1000:,.1f}k")

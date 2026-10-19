@@ -3,6 +3,7 @@ __pycache__/
 .ipynb_checkpoints/
 .env
 .env.local
+.DS_Store
 
 notes/
 scratch/

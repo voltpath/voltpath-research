@@ -8,6 +8,7 @@ Research articles on European power grid data (ENTSO-E), each shipped as a singl
 - [`ci-flows/`](articles/ci-flows/) – counter-intuitive flows in 2026, following up on Bertelli's series.
 - [`congestion-analysis/`](articles/congestion-analysis/) – estimates congestion rent from Voltpath data, with leaderboards by border, region, and country, and a 2026 case study of the year's most widely congested moments.
 - [`baltic-sync-litpol/`](articles/baltic-sync-litpol/) – Baltic states synchronisation, 2025-02, traced to the LT&ndash;PL (LitPol) link's capacity-recovery plan.
+- [`border-analysis/ES-FR/`](articles/border-analysis/ES-FR/) – flow duration curve and flow-type breakdown for the ES-FR border, trailing 12 months, with ES-PT as a comparison.
 
 Drafts in progress, not yet finished: [`ideas/flamanville-3-connection/`](articles/ideas/flamanville-3-connection/) (Flamanville 3 EPR grid connection, 2024-12-21) and [`ideas/core-ahc-golive/`](articles/ideas/core-ahc-golive/) (Core "Advanced Hybrid Coupling" go-live, 2026-06-10/11).
 

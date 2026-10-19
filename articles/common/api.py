@@ -89,7 +89,7 @@ def fetch_flows(
 
 
 def fetch_flows_range(
-    date_from: str, date_to: str, chunk_days: int = 1, max_workers: int = 2
+    date_from: str, date_to: str, chunk_days: int = 1, max_workers: int = 2, zone: list[str] | None = None
 ) -> pd.DataFrame:
     """Native-resolution fetch over a wide range, chunked day by day, fetched in parallel.
 
@@ -119,5 +119,5 @@ def fetch_flows_range(
         (start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")) for start, end in itertools.pairwise(days)
     ]
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        frames = list(pool.map(lambda r: fetch_flows(r[0], r[1], resolution="native"), ranges))
+        frames = list(pool.map(lambda r: fetch_flows(r[0], r[1], resolution="native", zone=zone), ranges))
     return pd.concat(frames, ignore_index=True)
