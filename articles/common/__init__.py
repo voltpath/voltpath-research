@@ -36,6 +36,7 @@ from .charts import (
     network_graph_chart,
     region_treemap,
     save_chart,
+    scaling_relation_chart,
     top_n_bar,
     voltpath_convergence_chart,
 )
@@ -74,7 +75,14 @@ from .regions import (
     is_baltic_border,
     is_core_ahc_vbz,
 )
-from .stats import fit_distribution, fit_results_table, fit_verdict
+from .stats import (
+    border_clustering_test,
+    fit_distribution,
+    fit_results_table,
+    fit_verdict,
+    scaling_relation,
+    truncation_verdict,
+)
 
 __all__ = [
     "API_KEY",
@@ -95,6 +103,7 @@ __all__ = [
     "before_after_convergence",
     "before_after_convergence_chart",
     "border_ccr_mechanism",
+    "border_clustering_test",
     "border_count_price_chart",
     "border_country",
     "border_region",
@@ -138,8 +147,11 @@ __all__ = [
     "price_spike_events",
     "region_treemap",
     "save_chart",
+    "scaling_relation",
+    "scaling_relation_chart",
     "top_n_bar",
     "top_vs_rest",
+    "truncation_verdict",
     "voltpath_convergence_chart",
     "zone_border_breakdown",
     "zone_price_summary",

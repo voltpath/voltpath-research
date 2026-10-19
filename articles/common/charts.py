@@ -92,9 +92,10 @@ def distribution_histogram(
 
 
 def ccdf_fit_chart(fit, title: str, x_label: str) -> go.Figure:
-    """Log-log CCDF: empirical tail plus the three CSN candidate fits
-    (power-law/lognormal/exponential) overlaid, evaluated on the same x-grid.
-    `fit` is a `powerlaw.Fit` instance from `common.stats.fit_distribution`.
+    """Log-log CCDF: empirical tail plus the four CSN candidate fits
+    (power-law/lognormal/exponential/truncated power law) overlaid, evaluated
+    on the same x-grid. `fit` is a `powerlaw.Fit` instance from
+    `common.stats.fit_distribution`.
     """
     x_emp, y_emp = fit.ccdf()
     x_grid = np.geomspace(fit.xmin, x_emp.max(), 200)
@@ -111,10 +112,42 @@ def ccdf_fit_chart(fit, title: str, x_label: str) -> go.Figure:
         (fit.power_law, "Power law", CATEGORICAL_PALETTE[1]),
         (fit.lognormal, "Lognormal", CATEGORICAL_PALETTE[2]),
         (fit.exponential, "Exponential", CATEGORICAL_PALETTE[3]),
+        (fit.truncated_power_law, "Truncated power law", CATEGORICAL_PALETTE[4]),
     ]:
         fig.add_scatter(x=x_grid, y=candidate.ccdf(x_grid), mode="lines", name=label, line={"color": color})
 
     fig.update_layout(title=title, xaxis_title=x_label, yaxis_title="P(X ≥ x)", autosize=True, height=450)
+    fig.update_xaxes(type="log")
+    fig.update_yaxes(type="log")
+    return _apply_web_style(fig)
+
+
+def scaling_relation_chart(
+    size: pd.Series, duration_h: pd.Series, result: dict, title: str, y_label: str
+) -> go.Figure:
+    """Log-log scatter of event size against duration, with the fitted
+    power-law scaling line (`size = 10**intercept * duration_h**gamma`)
+    overlaid - the avalanche size-duration signature from
+    `common.stats.scaling_relation`, as a picture rather than just a slope.
+    """
+    mask = (size > 0) & (duration_h > 0)
+    fig = go.Figure()
+    fig.add_scatter(
+        x=duration_h[mask],
+        y=size[mask],
+        mode="markers",
+        name="Events",
+        marker={"color": CATEGORICAL_PALETTE[0], "size": 4, "opacity": 0.4},
+    )
+    x_grid = np.geomspace(duration_h[mask].min(), duration_h[mask].max(), 100)
+    fig.add_scatter(
+        x=x_grid,
+        y=10 ** result["intercept"] * x_grid ** result["gamma"],
+        mode="lines",
+        name=f"Fit (γ={result['gamma']:.2f})",
+        line={"color": CATEGORICAL_PALETTE[1]},
+    )
+    fig.update_layout(title=title, xaxis_title="Duration (h)", yaxis_title=y_label, autosize=True, height=450)
     fig.update_xaxes(type="log")
     fig.update_yaxes(type="log")
     return _apply_web_style(fig)
