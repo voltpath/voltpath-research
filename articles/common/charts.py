@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -65,7 +66,58 @@ def save_chart(fig: go.Figure, name: str, **kwargs) -> None:
     """
     out_dir = Path("output")
     out_dir.mkdir(exist_ok=True)
+    kwargs.setdefault("scale", 2)
     fig.write_image(out_dir / f"{name}.png", **kwargs)
+
+
+def distribution_histogram(
+    values: pd.Series, title: str, x_label: str, log_y: bool = True, nbins: int = 60
+) -> go.Figure:
+    """Generic histogram for a raw event-size or price distribution - the
+    descriptive first look before any power-law/lognormal fitting. Log y-axis
+    by default since a heavy-tailed candidate is unreadable on a linear count
+    axis (one giant bar at the low end, everything else invisible).
+    """
+    fig = px.histogram(x=values, nbins=nbins, title=title, color_discrete_sequence=[CATEGORICAL_PALETTE[0]])
+    fig.update_layout(
+        showlegend=False,
+        xaxis_title=x_label,
+        yaxis_title="Count" + (" (log)" if log_y else ""),
+        autosize=True,
+        height=450,
+    )
+    if log_y:
+        fig.update_yaxes(type="log")
+    return _apply_web_style(fig)
+
+
+def ccdf_fit_chart(fit, title: str, x_label: str) -> go.Figure:
+    """Log-log CCDF: empirical tail plus the three CSN candidate fits
+    (power-law/lognormal/exponential) overlaid, evaluated on the same x-grid.
+    `fit` is a `powerlaw.Fit` instance from `common.stats.fit_distribution`.
+    """
+    x_emp, y_emp = fit.ccdf()
+    x_grid = np.geomspace(fit.xmin, x_emp.max(), 200)
+
+    fig = go.Figure()
+    fig.add_scatter(
+        x=x_emp,
+        y=y_emp,
+        mode="markers",
+        name="Empirical",
+        marker={"color": CATEGORICAL_PALETTE[0], "size": 4},
+    )
+    for candidate, label, color in [
+        (fit.power_law, "Power law", CATEGORICAL_PALETTE[1]),
+        (fit.lognormal, "Lognormal", CATEGORICAL_PALETTE[2]),
+        (fit.exponential, "Exponential", CATEGORICAL_PALETTE[3]),
+    ]:
+        fig.add_scatter(x=x_grid, y=candidate.ccdf(x_grid), mode="lines", name=label, line={"color": color})
+
+    fig.update_layout(title=title, xaxis_title=x_label, yaxis_title="P(X ≥ x)", autosize=True, height=450)
+    fig.update_xaxes(type="log")
+    fig.update_yaxes(type="log")
+    return _apply_web_style(fig)
 
 
 LEADERBOARD_METRICS = [
@@ -978,4 +1030,67 @@ def ccr_mechanism_treemap(leaderboard: pd.DataFrame, year: str) -> go.Figure:
         title=f"Congestion rent by CCR capacity-allocation mechanism, {year} (EUR)",
     )
     fig.update_layout(width=1400, height=800)
+    return fig
+
+
+def network_graph_chart(
+    G: nx.DiGraph,
+    groups: dict[str, str],
+    color_map: dict[str, str] | None,
+    title: str,
+    seed: int = 42,
+) -> go.Figure:
+    """Force-directed layout of a flow network, nodes colored by `groups` (zone -> group label).
+
+    No node/edge network precedent exists elsewhere in this repo - a
+    force-directed layout has no axis/gridline concept, so this skips
+    `_apply_web_style` entirely rather than forcing it to fit (see CLAUDE.md
+    on why a custom legend/axis treatment isn't worth re-attempting here).
+    One trace per group so Plotly's default legend lists group names natively.
+    """
+    pos = nx.spring_layout(G, weight="weight", seed=seed)
+
+    edge_x, edge_y = [], []
+    for u, v in G.edges():
+        edge_x += [pos[u][0], pos[v][0], None]
+        edge_y += [pos[u][1], pos[v][1], None]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=edge_x,
+            y=edge_y,
+            mode="lines",
+            line={"width": 0.5, "color": "#CCCCCC"},
+            hoverinfo="none",
+            showlegend=False,
+        )
+    )
+
+    nodes = pd.DataFrame({"zone": list(G.nodes())})
+    nodes["group"] = nodes["zone"].map(groups)
+    nodes["x"] = nodes["zone"].map(lambda z: pos[z][0])
+    nodes["y"] = nodes["zone"].map(lambda z: pos[z][1])
+
+    for group, sub in nodes.groupby("group"):
+        fig.add_trace(
+            go.Scatter(
+                x=sub["x"],
+                y=sub["y"],
+                mode="markers+text",
+                text=sub["zone"],
+                textposition="top center",
+                name=str(group),
+                marker={"size": 14, "color": (color_map or {}).get(group, "#888888")},
+            )
+        )
+
+    fig.update_layout(
+        title=title,
+        showlegend=True,
+        xaxis={"visible": False},
+        yaxis={"visible": False},
+        width=1000,
+        height=800,
+    )
     return fig
