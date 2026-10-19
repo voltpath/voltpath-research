@@ -45,6 +45,16 @@ def net_position_by_period(df: pd.DataFrame, freq: str) -> pd.DataFrame:
     )
 
 
+def net_volume_by_period(df: pd.DataFrame, freq: str) -> pd.DataFrame:
+    """Average signed net_flow_mw per border, grouped by `freq` ("M" or "season") -
+    the quantitative counterpart to `net_position_by_period`'s % of hours exporting,
+    since a border can export 90% of hours at a trickle or 51% of hours at full tilt.
+    """
+    out = df.copy()
+    out["period"] = period_label(out["datetime"], freq)
+    return out.groupby(["border", "period"])["net_flow_mw"].mean().rename("avg_net_flow_mw").reset_index()
+
+
 def hourly_border_counts(df: pd.DataFrame, flow_type: str) -> pd.DataFrame:
     subset = df[df["flow_type"] == flow_type]
     return subset.groupby("datetime")["border"].nunique().rename("n_borders").reset_index()

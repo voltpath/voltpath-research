@@ -162,6 +162,28 @@ def net_position_bar(
     return _apply_web_style(fig)
 
 
+def net_volume_bar(volume: pd.DataFrame, title: str, category_order: list[str] | None = None) -> go.Figure:
+    """Grouped bar of each border's average signed net_flow_mw, by period
+    (from `net_volume_by_period`) - the MW counterpart to `net_position_bar`'s
+    % of hours exporting, since a direction split alone doesn't say how much power moved.
+    """
+    colors = _border_color_map(volume["border"].unique().tolist())
+    fig = px.bar(
+        volume,
+        x="period",
+        y="avg_net_flow_mw",
+        color="border",
+        barmode="group",
+        title=title,
+        labels={"avg_net_flow_mw": "Avg net flow (MW)", "period": "Period"},
+        color_discrete_map=colors,
+        category_orders={"period": category_order} if category_order else None,
+    )
+    fig.add_hline(y=0, line={"color": "#9CA3AF", "dash": "dot"})
+    fig.update_layout(xaxis={"tickangle": -45})
+    return _apply_web_style(fig)
+
+
 def congestion_rent_schematic() -> go.Figure:
     """Textbook supply/demand schematic contrasting congestion rent with deadweight loss.
 
