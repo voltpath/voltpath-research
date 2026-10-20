@@ -310,6 +310,98 @@ def zone_price_summary(
     ).T
 
 
+def congestion_events(df: pd.DataFrame, flow_type: str = "Congestion") -> pd.DataFrame:
+    """Collapse consecutive MTUs flagged `flow_type` per border into discrete,
+    avalanche-like events - one row per contiguous run, not per MTU.
+
+    Contiguity is judged against each border's own native cadence (the
+    per-border median of `duration_h` across every row, not a hardcoded
+    15-minute assumption - some borders report at coarser resolution): a gap
+    more than 1.5x that cadence starts a new event. Drops UA_IPS borders
+    (wartime-driven, not ordinary market congestion - same reasoning as
+    `drop_ukraine`, applied before event construction instead of after).
+    """
+    cadence = df.groupby("border")["duration_h"].median()
+    subset = (
+        df[(df["flow_type"] == flow_type) & ~df["border"].str.contains("UA_IPS")]
+        .sort_values(["border", "datetime"])
+        .copy()
+    )
+    gap_h = subset.groupby("border")["datetime"].diff().dt.total_seconds() / 3600
+    tolerance_h = cadence.reindex(subset["border"]).to_numpy() * 1.5
+    new_event = gap_h.isna() | (gap_h.to_numpy() > tolerance_h)
+    subset["event_id"] = new_event.cumsum()
+    return (
+        subset.groupby("event_id")
+        .agg(
+            border=("border", "first"),
+            start=("datetime", "min"),
+            end=("datetime", "max"),
+            n_bars=("datetime", "size"),
+            duration_h=("duration_h", "sum"),
+            value_eur=("value_eur", lambda s: s.abs().sum()),
+            volume_mwh=("volume_mwh", "sum"),
+        )
+        .reset_index(drop=True)
+    )
+
+
+def zone_prices(df: pd.DataFrame) -> pd.DataFrame:
+    """Long per-zone day-ahead price series, derived from a flows dataframe's
+    price_from/price_to columns (deduped per zone/timestamp, since every
+    border touching a zone carries the same price for it) - same derivation
+    `zone_price_summary` uses internally for one snapshot, exposed standalone
+    here for distribution analysis across a whole series. Drops UA_IPS (same
+    reasoning as `congestion_events`).
+    """
+    prices = pd.concat(
+        [
+            df[["datetime", "bidding_zone_from", "price_from"]].rename(
+                columns={"bidding_zone_from": "zone", "price_from": "price"}
+            ),
+            df[["datetime", "bidding_zone_to", "price_to"]].rename(
+                columns={"bidding_zone_to": "zone", "price_to": "price"}
+            ),
+        ]
+    ).drop_duplicates(["datetime", "zone"])
+    return prices[prices["zone"] != "UA_IPS"]
+
+
+def price_spike_events(prices: pd.DataFrame, n_std: float = 3.0, mtu_h: float = 0.25) -> pd.DataFrame:
+    """Collapse contiguous MTUs where a zone's price exceeds that zone's own
+    full-sample mean + `n_std` standard deviations into discrete spike
+    episodes - same avalanche-event construction as congestion_events(), but
+    keyed by price level per zone rather than flow_type per border. Full-sample
+    (not a short rolling window) because the literature's "rolling mean+3std"
+    rule is typically computed over a trailing year, and a one-year dataset
+    makes that the same thing as full-sample.
+
+    Assumes uniform `mtu_h`-hour MTU spacing (confirmed 15-minute across every
+    zone in this dataset) rather than inferring per-zone cadence the way
+    congestion_events() does for borders - zone_prices() has no duration_h
+    column to derive that from.
+    """
+    prices = prices.copy()
+    prices["threshold"] = prices.groupby("zone")["price"].transform(lambda s: s.mean() + n_std * s.std())
+    subset = prices[prices["price"] > prices["threshold"]].sort_values(["zone", "datetime"]).copy()
+    subset["excess"] = subset["price"] - subset["threshold"]
+    gap_h = subset.groupby("zone")["datetime"].diff().dt.total_seconds() / 3600
+    new_event = gap_h.isna() | (gap_h > mtu_h * 1.5)
+    subset["event_id"] = new_event.cumsum()
+    return (
+        subset.groupby("event_id")
+        .agg(
+            zone=("zone", "first"),
+            start=("datetime", "min"),
+            end=("datetime", "max"),
+            n_bars=("datetime", "size"),
+            excess_eur=("excess", "sum"),
+        )
+        .assign(duration_h=lambda d: d["n_bars"] * mtu_h)
+        .reset_index(drop=True)
+    )
+
+
 def top_vs_rest(
     leaderboard: pd.DataFrame, metric: str = "implied_value_eur", top_n: int = 10
 ) -> pd.DataFrame:

@@ -8,7 +8,7 @@
 Re-exported here so `from common import X` keeps working unchanged for notebooks.
 """
 
-from .api import API_KEY, BASE_URL, HEADERS, fetch_flows, fetch_flows_range
+from .api import API_KEY, BASE_URL, HEADERS, fetch_flows, fetch_flows_range, fetch_prices, fetch_prices_range
 from .charts import (
     FLOW_COLORS,
     LEADERBOARD_METRICS,
@@ -16,11 +16,13 @@ from .charts import (
     ast_price_convergence_chart,
     before_after_convergence_chart,
     border_count_price_chart,
+    ccdf_fit_chart,
     ccr_mechanism_treemap,
     concentration_pie_chart,
     congestion_ci_chart,
     congestion_rent_schematic,
     daily_rent_chart,
+    distribution_histogram,
     flow_duration_curve,
     flow_price_scatter,
     flow_type_grouped_bar,
@@ -31,8 +33,10 @@ from .charts import (
     litgrid_capacity_plan_chart,
     net_position_bar,
     net_volume_bar,
+    network_graph_chart,
     region_treemap,
     save_chart,
+    scaling_relation_chart,
     top_n_bar,
     voltpath_convergence_chart,
 )
@@ -40,6 +44,7 @@ from .metrics import (
     SEASON_ORDER,
     before_after_convergence,
     ci_flow_value_table,
+    congestion_events,
     congestion_rent_table,
     convergence_summary,
     drop_ukraine,
@@ -50,9 +55,11 @@ from .metrics import (
     net_volume_by_period,
     peak,
     period_label,
+    price_spike_events,
     top_vs_rest,
     zone_border_breakdown,
     zone_price_summary,
+    zone_prices,
 )
 from .regions import (
     BALTIC_ZONES,
@@ -67,6 +74,14 @@ from .regions import (
     border_region,
     is_baltic_border,
     is_core_ahc_vbz,
+)
+from .stats import (
+    border_clustering_test,
+    fit_distribution,
+    fit_results_table,
+    fit_verdict,
+    scaling_relation,
+    truncation_verdict,
 )
 
 __all__ = [
@@ -88,20 +103,29 @@ __all__ = [
     "before_after_convergence",
     "before_after_convergence_chart",
     "border_ccr_mechanism",
+    "border_clustering_test",
     "border_count_price_chart",
     "border_country",
     "border_region",
+    "ccdf_fit_chart",
     "ccr_mechanism_treemap",
     "ci_flow_value_table",
     "concentration_pie_chart",
     "congestion_ci_chart",
+    "congestion_events",
     "congestion_rent_schematic",
     "congestion_rent_table",
     "convergence_summary",
     "daily_rent_chart",
+    "distribution_histogram",
     "drop_ukraine",
     "fetch_flows",
     "fetch_flows_range",
+    "fetch_prices",
+    "fetch_prices_range",
+    "fit_distribution",
+    "fit_results_table",
+    "fit_verdict",
     "flow_duration_curve",
     "flow_price_scatter",
     "flow_type_grouped_bar",
@@ -119,13 +143,19 @@ __all__ = [
     "net_position_by_period",
     "net_volume_bar",
     "net_volume_by_period",
+    "network_graph_chart",
     "peak",
     "period_label",
+    "price_spike_events",
     "region_treemap",
     "save_chart",
+    "scaling_relation",
+    "scaling_relation_chart",
     "top_n_bar",
     "top_vs_rest",
+    "truncation_verdict",
     "voltpath_convergence_chart",
     "zone_border_breakdown",
     "zone_price_summary",
+    "zone_prices",
 ]

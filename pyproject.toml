@@ -9,6 +9,8 @@ dependencies = [
     "requests>=2",
     "python-dotenv>=1",
     "pyarrow>=25.0.1",
+    "powerlaw>=2.0.0",
+    "networkx>=3.7",
 ]
 
 [dependency-groups]
