@@ -24,10 +24,20 @@ HEADERS = {"x-api-key": API_KEY} if API_KEY else {}
 CACHE_DIR = Path(__file__).parent.parent / ".cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
+# Own subdirectory so a prices request can never hash-collide with a flows
+# request for the same date_from/date_to/resolution/zone.
+PRICES_CACHE_DIR = CACHE_DIR / "prices"
+PRICES_CACHE_DIR.mkdir(exist_ok=True)
+
 
 def _cache_path(date_from: str, date_to: str, resolution: str | None, zone: list[str] | None) -> Path:
     key = hashlib.sha1(f"{date_from}|{date_to}|{resolution}|{','.join(zone or [])}".encode()).hexdigest()
     return CACHE_DIR / f"{key}.parquet"
+
+
+def _prices_cache_path(date_from: str, date_to: str, resolution: str | None, zone: list[str] | None) -> Path:
+    key = hashlib.sha1(f"{date_from}|{date_to}|{resolution}|{','.join(zone or [])}".encode()).hexdigest()
+    return PRICES_CACHE_DIR / f"{key}.parquet"
 
 
 def fetch_flows(
@@ -86,6 +96,67 @@ def fetch_flows(
 
     df.to_parquet(cache_file)
     return df
+
+
+def fetch_prices(
+    date_from: str,
+    date_to: str,
+    resolution: str | None = None,
+    zone: list[str] | None = None,
+    refresh: bool = False,
+) -> pd.DataFrame:
+    """Fetch one date range from /api/v1/prices, cached to disk by request params.
+
+    Same caching/retry behavior as `fetch_flows`. Returns one row per
+    zone/timestamp with `price_mwh`, the genuine per-zone day-ahead price -
+    unlike `price_delta` on the flows endpoint, which conflates both zones
+    of a border into one number.
+    """
+    cache_file = _prices_cache_path(date_from, date_to, resolution, zone)
+    if cache_file.exists() and not refresh:
+        return pd.read_parquet(cache_file)
+
+    params: dict[str, str | list[str]] = {"datetime_from": date_from, "datetime_to": date_to}
+    if resolution:
+        params["resolution"] = resolution
+    if zone:
+        params["zone"] = zone
+
+    resp = requests.get(f"{BASE_URL}/api/v1/prices", headers=HEADERS, params=params, timeout=60)
+    for _ in range(10):
+        if resp.status_code != 429:
+            break
+        time.sleep(float(resp.headers.get("Retry-After", 1)) + random.uniform(0, 0.5))
+        resp = requests.get(f"{BASE_URL}/api/v1/prices", headers=HEADERS, params=params, timeout=60)
+    resp.raise_for_status()
+
+    df = pd.DataFrame(resp.json()["data"])
+    if df.empty:
+        df.to_parquet(cache_file)
+        return df
+    df["datetime"] = pd.to_datetime(df["datetime"])
+
+    df.to_parquet(cache_file)
+    return df
+
+
+def fetch_prices_range(
+    date_from: str, date_to: str, chunk_days: int = 1, max_workers: int = 2, zone: list[str] | None = None
+) -> pd.DataFrame:
+    """Native-resolution fetch of /api/v1/prices over a wide range, chunked day by day.
+
+    Same chunking rationale as `fetch_flows_range` (30s Lambda timeout, 6MB
+    response cap, no pagination). Each day is cached individually by
+    `fetch_prices`, so re-running over an already-pulled range costs no API
+    calls.
+    """
+    days = pd.date_range(date_from, date_to, freq=f"{chunk_days}D")
+    ranges = [
+        (start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")) for start, end in itertools.pairwise(days)
+    ]
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        frames = list(pool.map(lambda r: fetch_prices(r[0], r[1], resolution="native", zone=zone), ranges))
+    return pd.concat(frames, ignore_index=True)
 
 
 def fetch_flows_range(

@@ -8,7 +8,7 @@
 Re-exported here so `from common import X` keeps working unchanged for notebooks.
 """
 
-from .api import API_KEY, BASE_URL, HEADERS, fetch_flows, fetch_flows_range
+from .api import API_KEY, BASE_URL, HEADERS, fetch_flows, fetch_flows_range, fetch_prices, fetch_prices_range
 from .charts import (
     FLOW_COLORS,
     LEADERBOARD_METRICS,
@@ -121,6 +121,8 @@ __all__ = [
     "drop_ukraine",
     "fetch_flows",
     "fetch_flows_range",
+    "fetch_prices",
+    "fetch_prices_range",
     "fit_distribution",
     "fit_results_table",
     "fit_verdict",
