@@ -1105,6 +1105,12 @@ def network_graph_chart(
     nodes["x"] = nodes["zone"].map(lambda z: pos[z][0])
     nodes["y"] = nodes["zone"].map(lambda z: pos[z][1])
 
+    if color_map is None:
+        palette = px.colors.qualitative.T10
+        color_map = {
+            group: palette[i % len(palette)] for i, group in enumerate(sorted(nodes["group"].unique()))
+        }
+
     for group, sub in nodes.groupby("group"):
         fig.add_trace(
             go.Scatter(
@@ -1114,7 +1120,7 @@ def network_graph_chart(
                 text=sub["zone"],
                 textposition="top center",
                 name=str(group),
-                marker={"size": 14, "color": (color_map or {}).get(group, "#888888")},
+                marker={"size": 14, "color": color_map.get(group, "#888888")},
             )
         )
 
@@ -1127,3 +1133,68 @@ def network_graph_chart(
         height=800,
     )
     return fig
+
+
+def node_robustness_chart(node_robustness: pd.DataFrame, date_from: str, date_to: str) -> go.Figure:
+    """Giant-component-vs-removals curve for node (bidding zone) removal, targeted vs random."""
+    fig = go.Figure()
+    series_colors = [CATEGORICAL_PALETTE[0], CATEGORICAL_PALETTE[1]]
+    for (col_name, series), color in zip(node_robustness.items(), series_colors, strict=True):
+        fig.add_scatter(x=node_robustness.index, y=series, mode="lines", name=col_name, line={"color": color})
+    fig.update_layout(
+        title=f"Giant component size vs zones removed, targeted vs random, {date_from} to {date_to}",
+        width=900,
+        height=550,
+    )
+    fig.update_xaxes(title_text="Zones removed")
+    fig.update_yaxes(title_text="Giant component (fraction of zones)")
+    return _apply_web_style(fig)
+
+
+def edge_unit_of_failure_chart(
+    directed_edge_robustness: pd.DataFrame, border_robustness: pd.DataFrame, date_from: str, date_to: str
+) -> go.Figure:
+    """Edge-removal robustness curves side by side: directed edges (wrong unit -
+    each border's two directions removed as separate events) vs border pairs
+    (right unit - both directions removed atomically, matching a real outage).
+    Sharing a y-axis makes the shift in the halfway point from the unit
+    mismatch visible as one comparison, not two separate charts a scroll apart.
+    """
+    fig = make_subplots(
+        rows=1,
+        cols=2,
+        subplot_titles=["Directed edges (2 events per border - wrong)", "Border pairs (1 event per border)"],
+        shared_yaxes=True,
+    )
+    series_colors = [CATEGORICAL_PALETTE[0], CATEGORICAL_PALETTE[1]]
+    for (col_name, series), color in zip(directed_edge_robustness.items(), series_colors, strict=True):
+        fig.add_scatter(
+            x=directed_edge_robustness.index,
+            y=series,
+            mode="lines",
+            name=col_name,
+            line={"color": color},
+            row=1,
+            col=1,
+        )
+    for (col_name, series), color in zip(border_robustness.items(), series_colors, strict=True):
+        fig.add_scatter(
+            x=border_robustness.index,
+            y=series,
+            mode="lines",
+            name=col_name,
+            line={"color": color},
+            legendgroup=col_name,
+            showlegend=False,
+            row=1,
+            col=2,
+        )
+    fig.update_layout(
+        title=f"Edge removal: counting unit changes the halfway point, {date_from} to {date_to}",
+        width=1400,
+        height=550,
+    )
+    fig.update_xaxes(title_text="Directed edges removed", row=1, col=1)
+    fig.update_xaxes(title_text="Border pairs removed", row=1, col=2)
+    fig.update_yaxes(title_text="Giant component (fraction of zones)", row=1, col=1)
+    return _apply_web_style(fig)

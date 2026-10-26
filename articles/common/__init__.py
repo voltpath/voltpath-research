@@ -3,6 +3,7 @@
 - api.py: Voltpath API access, auth, rate-limit handling, disk caching.
 - regions.py: zone-to-region / zone-to-country mappings for grouping borders geographically.
 - metrics.py: pandas aggregations that build leaderboards from raw flow data.
+- network.py: graph-building and robustness helpers for flow-network analysis.
 - charts.py: every Plotly figure builder.
 
 Re-exported here so `from common import X` keeps working unchanged for notebooks.
@@ -23,6 +24,7 @@ from .charts import (
     congestion_rent_schematic,
     daily_rent_chart,
     distribution_histogram,
+    edge_unit_of_failure_chart,
     flow_duration_curve,
     flow_price_scatter,
     flow_type_grouped_bar,
@@ -34,6 +36,7 @@ from .charts import (
     net_position_bar,
     net_volume_bar,
     network_graph_chart,
+    node_robustness_chart,
     region_treemap,
     save_chart,
     scaling_relation_chart,
@@ -60,6 +63,15 @@ from .metrics import (
     zone_border_breakdown,
     zone_price_summary,
     zone_prices,
+)
+from .network import (
+    border_betweenness,
+    border_robustness_curve,
+    build_flow_graph,
+    build_rent_graph,
+    edge_robustness_curve,
+    giant_component_fraction,
+    node_robustness_curve,
 )
 from .regions import (
     BALTIC_ZONES,
@@ -102,11 +114,15 @@ __all__ = [
     "ast_price_convergence_chart",
     "before_after_convergence",
     "before_after_convergence_chart",
+    "border_betweenness",
     "border_ccr_mechanism",
     "border_clustering_test",
     "border_count_price_chart",
     "border_country",
     "border_region",
+    "border_robustness_curve",
+    "build_flow_graph",
+    "build_rent_graph",
     "ccdf_fit_chart",
     "ccr_mechanism_treemap",
     "ci_flow_value_table",
@@ -119,6 +135,8 @@ __all__ = [
     "daily_rent_chart",
     "distribution_histogram",
     "drop_ukraine",
+    "edge_robustness_curve",
+    "edge_unit_of_failure_chart",
     "fetch_flows",
     "fetch_flows_range",
     "fetch_prices",
@@ -134,6 +152,7 @@ __all__ = [
     "flow_type_stacked_bar",
     "flow_type_stacked_bar_by_period",
     "flow_type_summary",
+    "giant_component_fraction",
     "hourly_border_counts",
     "is_baltic_border",
     "is_core_ahc_vbz",
@@ -144,6 +163,8 @@ __all__ = [
     "net_volume_bar",
     "net_volume_by_period",
     "network_graph_chart",
+    "node_robustness_chart",
+    "node_robustness_curve",
     "peak",
     "period_label",
     "price_spike_events",

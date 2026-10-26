@@ -155,21 +155,28 @@ def border_country(border: str) -> str | None:
     return country_from if country_from == country_to else f"{country_from} - {country_to}"
 
 
-CCR_OTHER = "Other (not in Iacopo's CCR breakdown)"
+CCR_OTHER = "Other (outside mapped CCR borders)"
 
-# Real per-border CCR capacity-allocation mechanism, transcribed from Iacopo
-# Bertelli's "Counterintuitive Flows in 2023, Part 3" (LinkedIn), grouped by
-# mechanism rather than geography - see scratch/media/*.png for the source
-# charts. Unlike ZONE_REGIONS this is keyed by the actual border pair, not a
-# per-zone label, since real CCR membership overlaps (Germany-Luxembourg sits
-# in both Core and Hansa, France in both Core and SWE, etc.) in a way a
-# one-region-per-zone dict can't represent.
+# TODO: this per-border CCR mechanism map was transcribed from a single
+# secondary source (a LinkedIn post's per-border mapping, see git history/
+# scratch/media/*.png) rather than ACER/ENTSO-E primary CCR documentation.
+# It's never been cross-checked against the official CCR decisions, so
+# borders folded into CCR_OTHER or assigned the wrong mechanism wouldn't be
+# caught. Replace with a mapping sourced directly from ACER's CCR decisions
+# (e.g. acer.europa.eu capacity calculation region pages) before relying on
+# this for anything beyond illustrative purity numbers.
+#
+# Real per-border CCR capacity-allocation mechanism, grouped by mechanism
+# rather than geography. Unlike ZONE_REGIONS this is keyed by the actual
+# border pair, not a per-zone label, since real CCR membership overlaps
+# (Germany-Luxembourg sits in both Core and Hansa, France in both Core and
+# SWE, etc.) in a way a one-region-per-zone dict can't represent.
 #
 # Italy North's borders are folded into Core here rather than kept as their
 # own 2023-era group, since ACER decisions 04/2024 and 10/2025 merge the two
 # into a single CCR - officially renamed "Central Europe", though "Core" is
 # still the term in common use (day-ahead go-live for the merged region isn't
-# until 2027). Borders outside Iacopo's breakdown (Western Balkans, Ukraine,
+# until 2027). Borders outside this breakdown (Western Balkans, Ukraine,
 # Sardinia, ...) fall back to CCR_OTHER.
 CCR_MECHANISM_COLORS = {
     "Switzerland (explicit allocation)": "#B0B0B0",
